@@ -61,19 +61,9 @@ function roomSummary(room) {
 }
 
 function currentTurnPlayerId(room) {
-  const activePlayers = room.players.filter(p => p.connected);
-  if (activePlayers.length === 0) return null;
-  // turnIndex cycles through ALL players (including disconnected) but we
-  // skip disconnected ones when resolving whose actual turn it is
   const len = room.players.length;
   if (len === 0) return null;
-  let idx = room.turnIndex % len;
-  // find next connected player from turnIndex
-  for (let i = 0; i < len; i++) {
-    const p = room.players[(idx + i) % len];
-    if (p.connected) return p.id;
-  }
-  return null;
+  return room.players[room.turnIndex % len].id;
 }
 
 wss.on('connection', (ws) => {
