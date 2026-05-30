@@ -507,20 +507,24 @@
   <div class="tagline">Eliminate. Decide. Go.</div>
 
   <div class="entry-card">
-    <div class="entry-section-label">Create a new room</div>
-    <div class="field-group">
-      <input class="text-input" id="createUsername" type="text" maxlength="20" placeholder="Your name" autocomplete="off" />
+    <div id="createSection">
+      <div class="entry-section-label">Create a new room</div>
+      <div class="field-group">
+        <input class="text-input" id="createUsername" type="text" maxlength="20" placeholder="Your name" autocomplete="off" />
+      </div>
+      <button class="primary-btn" id="createBtn" onclick="createRoom()">Create Room</button>
     </div>
-    <button class="primary-btn" onclick="createRoom()">Create Room</button>
 
     <div class="divider-row">or</div>
 
-    <div class="entry-section-label">Join an existing room</div>
-    <div class="field-group">
-      <input class="text-input code-style" id="joinCode" type="text" maxlength="8" placeholder="ROOM CODE" autocomplete="off" autocorrect="off" spellcheck="false" />
-      <input class="text-input" id="joinUsername" type="text" maxlength="20" placeholder="Your name" autocomplete="off" />
+    <div id="joinSection">
+      <div class="entry-section-label">Join an existing room</div>
+      <div class="field-group">
+        <input class="text-input code-style" id="joinCode" type="text" maxlength="8" placeholder="ROOM CODE" autocomplete="off" autocorrect="off" spellcheck="false" />
+        <input class="text-input" id="joinUsername" type="text" maxlength="20" placeholder="Your name" autocomplete="off" />
+      </div>
+      <button class="primary-btn" id="joinBtn" onclick="joinRoom()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);box-shadow:none;" onmouseover="this.style.borderColor='var(--gold-dim)'" onmouseout="this.style.borderColor='var(--border2)'">Join Room</button>
     </div>
-    <button class="primary-btn" onclick="joinRoom()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);box-shadow:none;" onmouseover="this.style.borderColor='var(--gold-dim)'" onmouseout="this.style.borderColor='var(--border2)'">Join Room</button>
 
     <div class="entry-error" id="entryError"></div>
   </div>
@@ -1145,6 +1149,22 @@ window.addEventListener('DOMContentLoaded', () => {
   const r = params.get('room');
   if (r) {
     document.getElementById('joinCode').value = r.toUpperCase();
+    // Reorder: Join above Create
+    const card = document.querySelector('.entry-card');
+    const joinSection = document.getElementById('joinSection');
+    const divider = card.querySelector('.divider-row');
+    const createSection = document.getElementById('createSection');
+    card.insertBefore(joinSection, createSection);
+    card.insertBefore(divider, createSection);
+    // Swap button prominence
+    const joinBtn = document.getElementById('joinBtn');
+    joinBtn.removeAttribute('style');
+    joinBtn.removeAttribute('onmouseover');
+    joinBtn.removeAttribute('onmouseout');
+    const createBtn = document.getElementById('createBtn');
+    createBtn.style.cssText = 'background:var(--surface2);color:var(--text);border:1px solid var(--border2);box-shadow:none;';
+    createBtn.setAttribute('onmouseover', "this.style.borderColor='var(--gold-dim)'");
+    createBtn.setAttribute('onmouseout', "this.style.borderColor='var(--border2)'");
     document.getElementById('joinUsername').focus();
   }
 });
