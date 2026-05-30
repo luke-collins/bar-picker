@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bar Picker</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0806;
+    --surface: #161008;
+    --surface2: #1f1710;
+    --surface3: #271e12;
+    --gold: #e8a435;
+    --gold-dim: #9b6c18;
+    --amber: #f5cc70;
+    --red: #b83226;
+    --red-bg: rgba(184,50,38,0.1);
+    --green: #2d9e5f;
+    --green-bg: rgba(45,158,95,0.1);
+    --blue: #4a90d9;
+    --text: #ede0c8;
+    --text-muted: #6b5c42;
+    --border: #261e12;
+    --border2: #332818;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='0.032'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 9998;
+  }
+
+  /* ── SCREENS ── */
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* ── LOBBY / ENTRY ── */
+  #entryScreen {
+    min-height: 100vh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 32px 20px;
+    position: relative;
+  }
+  #entryScreen::before {
+    content: '';
+    position: absolute; top: -100px; left: 50%; transform: translateX(-50%);
+    width: 520px; height: 520px;
+    background: radial-gradient(ellipse, rgba(232,164,53,0.055) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(60px, 16vw, 88px);
+    letter-spacing: 4px; line-height: 1;
+    background: linear-gradient(170deg, var(--amber) 0%, var(--gold) 45%, #a06018 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    filter: drop-shadow(0 0 28px rgba(232,164,53,0.22));
+    margin-bottom: 6px;
+  }
+  .tagline {
+    color: var(--text-muted); font-size: 11px; letter-spacing: 4px;
+    text-transform: uppercase; margin-bottom: 44px;
+  }
+  .entry-card {
+    background: var(--surface); border: 1px solid var(--border2);
+    border-radius: 18px; padding: 30px 26px;
+    width: 100%; max-width: 380px;
+  }
+  .entry-section-label {
+    font-size: 10px; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--text-muted); margin-bottom: 11px;
+  }
+  .field-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+  .text-input {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: 10px; padding: 13px 15px; color: var(--text);
+    font-family: 'DM Sans', sans-serif; font-size: 15px; outline: none;
+    transition: border-color 0.2s;
+  }
+  .text-input::placeholder { color: var(--text-muted); }
+  .text-input:focus { border-color: var(--gold-dim); }
+  .text-input.code-style {
+    font-family: 'Bebas Neue', sans-serif; font-size: 22px;
+    letter-spacing: 5px; text-transform: uppercase; text-align: center;
+  }
+  .divider-row {
+    display: flex; align-items: center; gap: 12px;
+    margin: 22px 0; color: var(--text-muted); font-size: 11px;
+    letter-spacing: 2px; text-transform: uppercase;
+  }
+  .divider-row::before, .divider-row::after {
+    content: ''; flex: 1; height: 1px; background: var(--border2);
+  }
+  .primary-btn {
+    width: 100%; padding: 14px; background: var(--gold); color: #0a0806;
+    border: none; border-radius: 10px; font-family: 'Bebas Neue', sans-serif;
+    font-size: 21px; letter-spacing: 2px; cursor: pointer;
+    transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+    box-shadow: 0 4px 18px rgba(232,164,53,0.18);
+    margin-top: 10px;
+  }
+  .primary-btn:hover { background: var(--amber); box-shadow: 0 4px 26px rgba(232,164,53,0.32); }
+  .primary-btn:active { transform: scale(0.97); }
+  .secondary-btn {
+    width: 100%; padding: 13px; background: transparent; color: var(--text-muted);
+    border: 1px solid var(--border2); border-radius: 10px;
+    font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500;
+    cursor: pointer; transition: all 0.15s; margin-top: 8px;
+  }
+  .secondary-btn:hover { border-color: var(--gold-dim); color: var(--text); background: var(--surface2); }
+  .entry-error { color: var(--red); font-size: 12px; margin-top: 10px; min-height: 18px; text-align: center; }
+
+  /* ── WAITING ROOM ── */
+  #waitingScreen {
+    max-width: 480px; margin: 0 auto; padding: 0 16px 60px;
+  }
+  .waiting-header {
+    text-align: center; padding: 36px 0 28px;
+  }
+  .waiting-logo {
+    font-family: 'Bebas Neue', sans-serif; font-size: 32px; letter-spacing: 3px;
+    background: linear-gradient(135deg, var(--amber), var(--gold));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    margin-bottom: 4px;
+  }
+  .room-code-big {
+    font-family: 'Bebas Neue', sans-serif; font-size: 52px; letter-spacing: 8px;
+    color: var(--gold); filter: drop-shadow(0 0 20px rgba(232,164,53,0.3));
+    line-height: 1; margin: 8px 0 4px;
+  }
+  .share-hint {
+    font-size: 12px; color: var(--text-muted); margin-bottom: 4px;
+  }
+  .copy-link-btn {
+    background: none; border: none; color: var(--gold-dim); font-size: 12px;
+    cursor: pointer; text-decoration: underline; padding: 2px;
+    transition: color 0.15s;
+  }
+  .copy-link-btn:hover { color: var(--gold); }
+
+  .waiting-section { margin-bottom: 24px; }
+  .section-label {
+    font-size: 9px; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--text-muted); margin-bottom: 10px; padding-left: 2px;
+  }
+
+  /* player list */
+  .player-list { display: flex; flex-direction: column; gap: 7px; }
+  .player-item {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 15px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .player-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .player-dot.connected { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .player-dot.disconnected { background: var(--text-muted); }
+  .player-name { font-size: 15px; font-weight: 500; flex: 1; }
+  .player-badge {
+    font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 20px;
+  }
+  .player-badge.host { background: rgba(232,164,53,0.12); color: var(--gold); border: 1px solid rgba(232,164,53,0.2); }
+  .player-badge.you { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border2); }
+
+  /* bar list in waiting */
+  .waiting-bar-item {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; display: flex; align-items: center; overflow: hidden;
+  }
+  .waiting-bar-name { flex: 1; padding: 13px 14px; font-size: 15px; }
+  .waiting-bar-del {
+    width: 42px; align-self: stretch; background: none; border: none;
+    border-left: 1px solid var(--border); color: var(--text-muted);
+    font-size: 13px; cursor: pointer; display: flex; align-items: center;
+    justify-content: center; opacity: 0.35; transition: all 0.15s;
+  }
+  .waiting-bar-del:hover { background: var(--red-bg); color: var(--red); opacity: 1; }
+
+  .add-form { display: flex; gap: 8px; margin-bottom: 10px; }
+  .add-input {
+    flex: 1; background: var(--surface); border: 1px solid var(--border2);
+    border-radius: 10px; padding: 13px 14px; color: var(--text);
+    font-family: 'DM Sans', sans-serif; font-size: 15px; outline: none;
+    transition: border-color 0.2s;
+  }
+  .add-input::placeholder { color: var(--text-muted); }
+  .add-input:focus { border-color: var(--gold-dim); }
+  .add-btn {
+    background: var(--gold); color: #0a0806; border: none; border-radius: 10px;
+    padding: 0 17px; font-family: 'Bebas Neue', sans-serif; font-size: 20px;
+    letter-spacing: 1px; cursor: pointer; transition: all 0.15s; flex-shrink: 0;
+  }
+  .add-btn:hover { background: var(--amber); }
+  .add-btn:active { transform: scale(0.96); }
+
+  .start-notice {
+    font-size: 12px; color: var(--text-muted); text-align: center;
+    padding: 12px; line-height: 1.6;
+  }
+  .start-notice strong { color: var(--text); }
+
+  /* list mode selector */
+  .list-mode-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .mode-toggle {
+    display: flex; background: var(--surface); border: 1px solid var(--border2);
+    border-radius: 8px; overflow: hidden; flex-shrink: 0;
+  }
+  .mode-tab {
+    padding: 6px 12px; font-size: 11px; font-weight: 500; letter-spacing: 0.3px;
+    cursor: pointer; border: none; background: none; color: var(--text-muted);
+    transition: all 0.15s; white-space: nowrap;
+  }
+  .mode-tab.active {
+    background: var(--gold); color: #0a0806;
+  }
+
+  /* default bar chips grid */
+  .default-bars-grid {
+    display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px;
+  }
+  .default-chip {
+    padding: 7px 13px; border-radius: 20px; font-size: 13px;
+    border: 1px solid var(--border2); background: var(--surface);
+    color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+    user-select: none; display: flex; align-items: center; gap: 5px;
+  }
+  .default-chip:hover { border-color: var(--gold-dim); color: var(--text); }
+  .default-chip.selected {
+    background: rgba(232,164,53,0.1); border-color: var(--gold-dim); color: var(--amber);
+  }
+  .default-chip.selected::before { content: '✓ '; font-size: 11px; color: var(--gold); }
+
+  .chip-actions {
+    display: flex; gap: 8px; margin-bottom: 14px;
+  }
+  .chip-action-btn {
+    flex: 1; padding: 9px; background: var(--surface); border: 1px solid var(--border2);
+    border-radius: 8px; color: var(--text-muted); font-size: 12px; font-weight: 500;
+    cursor: pointer; transition: all 0.15s; text-align: center;
+  }
+  .chip-action-btn:hover { border-color: var(--gold-dim); color: var(--text); }
+  .chip-action-btn.confirm {
+    background: var(--gold); color: #0a0806; border-color: var(--gold); font-weight: 600;
+  }
+  .chip-action-btn.confirm:hover { background: var(--amber); }
+
+  .selected-count {
+    font-size: 11px; color: var(--text-muted); text-align: center;
+    margin-bottom: 10px;
+  }
+  .selected-count strong { color: var(--gold); }
+
+  /* ── GAME SCREEN ── */
+  #gameScreen {
+    max-width: 500px; margin: 0 auto; padding: 0 16px 80px;
+  }
+
+  /* topbar */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 0 14px; border-bottom: 1px solid var(--border); margin-bottom: 18px;
+  }
+  .topbar-logo {
+    font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 2px;
+    background: linear-gradient(135deg, var(--amber), var(--gold));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .room-pill {
+    display: flex; align-items: center; gap: 7px;
+    background: var(--surface); border: 1px solid var(--border2);
+    border-radius: 30px; padding: 5px 11px 5px 9px;
+    cursor: pointer; transition: border-color 0.2s; user-select: none;
+  }
+  .room-pill:hover { border-color: var(--gold-dim); }
+  .pill-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 5px var(--green); }
+  .pill-code { font-family: 'Bebas Neue', sans-serif; font-size: 14px; letter-spacing: 2px; color: var(--gold); }
+  .pill-count { font-size: 11px; color: var(--text-muted); }
+
+  /* turn banner */
+  .turn-banner {
+    border-radius: 13px; padding: 16px 18px; margin-bottom: 18px;
+    position: relative; overflow: hidden;
+    transition: all 0.3s;
+  }
+  .turn-banner.my-turn {
+    background: linear-gradient(135deg, #1a2e14, #0e1f0a);
+    border: 1px solid var(--green);
+  }
+  .turn-banner.my-turn::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(45,158,95,0.13) 0%, transparent 70%);
+  }
+  .turn-banner.waiting {
+    background: var(--surface); border: 1px solid var(--border2);
+  }
+  .turn-label {
+    font-size: 9px; letter-spacing: 3.5px; text-transform: uppercase;
+    margin-bottom: 4px; position: relative;
+  }
+  .turn-banner.my-turn .turn-label { color: var(--green); }
+  .turn-banner.waiting .turn-label { color: var(--text-muted); }
+  .turn-message {
+    font-size: 16px; font-weight: 500; position: relative; line-height: 1.35;
+  }
+  .turn-banner.my-turn .turn-message { color: var(--amber); }
+  .turn-banner.waiting .turn-message { color: var(--text); }
+  .turn-sub {
+    font-size: 12px; margin-top: 3px; position: relative;
+  }
+  .turn-banner.my-turn .turn-sub { color: rgba(245,204,112,0.6); }
+  .turn-banner.waiting .turn-sub { color: var(--text-muted); }
+
+  /* turn order strip */
+  .turn-order {
+    display: flex; gap: 6px; margin-bottom: 18px;
+    overflow-x: auto; padding-bottom: 4px;
+  }
+  .turn-order::-webkit-scrollbar { display: none; }
+  .turn-chip {
+    flex-shrink: 0; padding: 5px 10px; border-radius: 20px; font-size: 12px;
+    border: 1px solid var(--border2); background: var(--surface);
+    color: var(--text-muted); white-space: nowrap; transition: all 0.2s;
+    position: relative;
+  }
+  .turn-chip.active-turn {
+    background: rgba(232,164,53,0.1); border-color: var(--gold-dim);
+    color: var(--gold); font-weight: 500;
+  }
+  .turn-chip.active-turn::before {
+    content: '▸ '; font-size: 10px;
+  }
+  .turn-chip.you-chip { font-style: italic; }
+  .turn-chip.disconnected-chip { opacity: 0.35; text-decoration: line-through; }
+
+  /* stats */
+  .stats-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 18px;
+  }
+  .stat-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; text-align: center;
+  }
+  .stat-num {
+    font-family: 'Bebas Neue', sans-serif; font-size: 28px; line-height: 1;
+    color: var(--gold);
+  }
+  .stat-num.green { color: var(--green); }
+  .stat-label { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); margin-top: 2px; }
+
+  /* bar list */
+  .bar-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 18px; }
+  .bar-item {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 11px; display: flex; align-items: center; overflow: hidden;
+    transition: opacity 0.3s, border-color 0.2s;
+  }
+  .bar-item.eliminated {
+    opacity: 0.28; border-color: transparent; background: var(--surface);
+  }
+  .bar-item.eliminated .bar-name {
+    text-decoration: line-through; text-decoration-color: var(--red);
+    text-decoration-thickness: 2px; color: var(--text-muted);
+  }
+  @keyframes winnerPulse {
+    0%, 100% { box-shadow: 0 0 0 1px var(--green), 0 0 16px rgba(45,158,95,0.1); }
+    50% { box-shadow: 0 0 0 1px var(--green), 0 0 26px rgba(45,158,95,0.28); }
+  }
+  .bar-item.winner { border-color: var(--green); animation: winnerPulse 2s ease-in-out infinite; }
+  .bar-item.winner .bar-name { color: var(--amber); font-weight: 500; }
+
+  .elim-btn {
+    width: 52px; min-width: 52px; align-self: stretch;
+    background: transparent; border: none; border-right: 1px solid var(--border);
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    font-size: 15px; color: var(--text-muted); transition: all 0.15s;
+  }
+  .elim-btn:hover:not(:disabled) { background: var(--red-bg); color: var(--red); }
+  .elim-btn:disabled { cursor: not-allowed; opacity: 0.3; }
+  .bar-name { flex: 1; padding: 14px 12px; font-size: 15px; color: var(--text); line-height: 1.3; }
+
+  /* winner banner */
+  .winner-banner {
+    background: linear-gradient(135deg, #0d1f14, #091510);
+    border: 1px solid var(--green); border-radius: 13px;
+    padding: 20px 22px; margin-bottom: 18px; display: none; position: relative; overflow: hidden;
+  }
+  .winner-banner::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(45,158,95,0.13) 0%, transparent 70%);
+  }
+  .winner-banner.visible { display: block; }
+  .winner-lbl { font-size: 9px; letter-spacing: 3.5px; text-transform: uppercase; color: var(--green); margin-bottom: 4px; position: relative; }
+  .winner-name { font-family: 'Bebas Neue', sans-serif; font-size: 34px; color: #fff; letter-spacing: 1px; line-height: 1.1; position: relative; }
+  .winner-icon { position: absolute; right: 20px; top: 50%; transform: translateY(-50%); font-size: 30px; }
+
+  /* actions */
+  .game-actions { display: flex; gap: 8px; }
+  .act-btn {
+    flex: 1; padding: 11px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 9px; color: var(--text-muted);
+    font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 500;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .act-btn:hover { border-color: var(--gold-dim); color: var(--text); }
+  .act-btn.danger:hover { border-color: var(--red); color: var(--red); }
+  .act-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .act-btn:disabled:hover { border-color: var(--border); color: var(--text-muted); }
+
+  /* elim section toggle */
+  .elim-toggle {
+    background: none; border: none; color: var(--text-muted); font-size: 11px;
+    letter-spacing: 2px; text-transform: uppercase; cursor: pointer;
+    display: flex; align-items: center; gap: 6px;
+    margin: 14px 0 8px; padding: 3px 2px; transition: color 0.15s;
+  }
+  .elim-toggle:hover { color: var(--text); }
+  .elim-arrow { transition: transform 0.2s; font-size: 9px; }
+  .elim-arrow.open { transform: rotate(90deg); }
+
+  .empty {
+    text-align: center; padding: 32px 16px; color: var(--text-muted);
+    font-size: 13px; line-height: 1.7;
+  }
+  .empty-icon { font-size: 34px; margin-bottom: 10px; opacity: 0.4; }
+
+  /* conn badge */
+  .conn-badge {
+    position: fixed; top: 13px; right: 13px;
+    font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+    padding: 4px 10px; border-radius: 20px; z-index: 100;
+    transition: all 0.3s; pointer-events: none;
+  }
+  .conn-badge.connected { background: rgba(45,158,95,0.12); color: var(--green); border: 1px solid rgba(45,158,95,0.25); }
+  .conn-badge.connecting { background: rgba(232,164,53,0.1); color: var(--gold); border: 1px solid rgba(232,164,53,0.2); }
+  .conn-badge.disconnected { background: rgba(184,50,38,0.1); color: var(--red); border: 1px solid rgba(184,50,38,0.22); }
+
+  /* toast */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%;
+    transform: translateX(-50%) translateY(70px);
+    background: var(--surface2); border: 1px solid var(--gold-dim);
+    color: var(--text); padding: 10px 20px; border-radius: 30px;
+    font-size: 13px; font-weight: 500;
+    transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    z-index: 9999; white-space: nowrap; pointer-events: none;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* confetti */
+  #confettiCanvas { position: fixed; inset: 0; pointer-events: none; z-index: 9997; }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .bar-item.new { animation: slideIn 0.2s ease forwards; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; } 50% { opacity: 0.6; }
+  }
+  .pulsing { animation: pulse 1.4s ease-in-out infinite; }
+</style>
+</head>
+<body>
+
+<canvas id="confettiCanvas"></canvas>
+<div class="toast" id="toast"></div>
+<div class="conn-badge connecting" id="connBadge">Connecting...</div>
+
+<!-- ── ENTRY SCREEN ─────────────────────────────────────────────── -->
+<div id="entryScreen" class="screen active">
+  <div class="logo">Bar Picker</div>
+  <div class="tagline">Eliminate. Decide. Go.</div>
+
+  <div class="entry-card">
+    <div class="entry-section-label">Create a new room</div>
+    <div class="field-group">
+      <input class="text-input" id="createUsername" type="text" maxlength="20" placeholder="Your name" autocomplete="off" />
+    </div>
+    <button class="primary-btn" onclick="createRoom()">Create Room</button>
+
+    <div class="divider-row">or</div>
+
+    <div class="entry-section-label">Join an existing room</div>
+    <div class="field-group">
+      <input class="text-input code-style" id="joinCode" type="text" maxlength="8" placeholder="ROOM CODE" autocomplete="off" autocorrect="off" spellcheck="false" />
+      <input class="text-input" id="joinUsername" type="text" maxlength="20" placeholder="Your name" autocomplete="off" />
+    </div>
+    <button class="primary-btn" onclick="joinRoom()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);box-shadow:none;" onmouseover="this.style.borderColor='var(--gold-dim)'" onmouseout="this.style.borderColor='var(--border2)'">Join Room</button>
+
+    <div class="entry-error" id="entryError"></div>
+  </div>
+</div>
+
+<!-- ── WAITING SCREEN ──────────────────────────────────────────── -->
+<div id="waitingScreen" class="screen">
+  <div class="waiting-header">
+    <div class="waiting-logo">Bar Picker</div>
+    <div style="font-size:11px;color:var(--text-muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">Room Code</div>
+    <div class="room-code-big" id="waitingRoomCode">—</div>
+    <div class="share-hint">Share this code with your friends</div>
+    <button class="copy-link-btn" onclick="copyLink()">⎘ copy invite link</button>
+  </div>
+
+  <div class="waiting-section">
+    <div class="section-label" id="playersLbl">Players (0)</div>
+    <div class="player-list" id="playerList"></div>
+  </div>
+
+  <div class="waiting-section">
+    <div class="list-mode-header">
+      <div class="section-label" style="margin-bottom:0">Bars</div>
+      <div class="mode-toggle">
+        <button class="mode-tab active" id="tabDefault" onclick="setListMode('default')">Our Spots</button>
+        <button class="mode-tab" id="tabCustom" onclick="setListMode('custom')">Custom List</button>
+      </div>
+    </div>
+
+    <!-- DEFAULT mode: chip picker -->
+    <div id="defaultModePanel">
+      <div class="default-bars-grid" id="defaultChipsGrid"></div>
+      <div class="selected-count" id="selectedCount">0 bars selected</div>
+      <div class="chip-actions">
+        <button class="chip-action-btn" onclick="selectAllChips()">Select All</button>
+        <button class="chip-action-btn" onclick="selectNoneChips()">Clear</button>
+        <button class="chip-action-btn confirm" onclick="loadSelectedDefaults()">Use These Bars →</button>
+      </div>
+      <div class="bar-list" id="waitingBarList" style="margin-top:4px"></div>
+    </div>
+
+    <!-- CUSTOM mode: manual add -->
+    <div id="customModePanel" style="display:none">
+      <div class="add-form">
+        <input class="add-input" id="waitingBarInput" type="text" maxlength="60" placeholder="Bar or restaurant name..." autocomplete="off" />
+        <button class="add-btn" onclick="addBar()">ADD</button>
+      </div>
+      <div class="bar-list" id="customBarList">
+        <div class="empty" style="padding:20px 0">
+          <div class="empty-icon">🍸</div>
+          Add your own bars above
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="hostStartArea">
+    <button class="primary-btn" id="startBtn" onclick="startGame()" disabled>Start Game</button>
+    <div class="start-notice" id="startNotice">Need at least <strong>2 bars</strong> to start</div>
+  </div>
+  <div id="guestWaitArea" style="display:none">
+    <div class="start-notice pulsing">Waiting for the host to start the game...</div>
+  </div>
+</div>
+
+<!-- ── GAME SCREEN ─────────────────────────────────────────────── -->
+<div id="gameScreen" class="screen">
+  <div class="topbar">
+    <div class="topbar-logo">Bar Picker</div>
+    <div class="room-pill" onclick="copyLink()" title="Copy invite link">
+      <div class="pill-dot"></div>
+      <div class="pill-code" id="gamePillCode">—</div>
+      <div class="pill-count" id="gamePillCount">—</div>
+    </div>
+  </div>
+
+  <!-- Turn banner -->
+  <div class="turn-banner my-turn" id="turnBanner">
+    <div class="turn-label" id="turnLabel">Your Turn</div>
+    <div class="turn-message" id="turnMessage">Pick a bar to eliminate</div>
+    <div class="turn-sub" id="turnSub">Tap ✕ on any bar below</div>
+  </div>
+
+  <!-- Turn order strip -->
+  <div class="turn-order" id="turnOrder"></div>
+
+  <!-- Winner banner -->
+  <div class="winner-banner" id="winnerBanner">
+    <div class="winner-lbl">🏆 Tonight's Bar</div>
+    <div class="winner-name" id="winnerName">—</div>
+    <div class="winner-icon">🍺</div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat-box">
+      <div class="stat-num green" id="statLeft">0</div>
+      <div class="stat-label">Remaining</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num" id="statElim">0</div>
+      <div class="stat-label">Eliminated</div>
+    </div>
+  </div>
+
+  <!-- Active bars label -->
+  <div class="section-label" id="gameBarsLbl">Bars</div>
+  <div class="bar-list" id="gameBarList"></div>
+
+  <!-- Actions (host only) -->
+  <div class="game-actions" id="gameActions" style="display:none">
+    <button class="act-btn" id="playAgainBtn" onclick="playAgain()">↩ Play Again</button>
+    <button class="act-btn danger" id="clearBtn" onclick="confirmClear()">✕ Clear All</button>
+  </div>
+
+  <!-- Eliminated collapse -->
+  <div id="elimSection" style="display:none">
+    <button class="elim-toggle" onclick="toggleElim()">
+      <span class="elim-arrow" id="elimArrow">▶</span>
+      <span id="elimLbl">Eliminated (0)</span>
+    </button>
+    <div class="bar-list" id="elimBarList" style="display:none"></div>
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────
+let myPlayerId = null;
+let myUsername = null;
+let isHost = false;
+let roomCode = null;
+let roomState = null; // full room state from server
+let elimOpen = false;
+let prevWinnerId = null;
+let ws = null;
+let pendingCode = null;
+let listMode = 'default'; // 'default' | 'custom'
+let selectedDefaults = new Set();
+
+const DEFAULT_BARS = [
+  'Bulldog (Uptown)', 'BBG', 'Yacht Club', 'The Coup Yard', "Bruno's",
+  'Bulldog (Mid City)', 'Urban South', 'Wrong Iron', 'Monkey Hill',
+  'Rendezvous', "Mick's", "Fat Harry's", 'Parasols', 'Port Orleans',
+  "Lucy's", 'Hog Alley', 'Finn McCools', 'Parlays', 'Cooter Browns',
+  'The Basin', "Manning's", 'Abita', 'MRB'
+];
+
+// Pre-select all defaults
+DEFAULT_BARS.forEach(b => selectedDefaults.add(b));
+
+function initDefaultChips() {
+  const grid = document.getElementById('defaultChipsGrid');
+  grid.innerHTML = '';
+  DEFAULT_BARS.forEach(name => {
+    const chip = document.createElement('button');
+    chip.className = 'default-chip' + (selectedDefaults.has(name) ? ' selected' : '');
+    chip.textContent = name;
+    chip.onclick = () => {
+      if (selectedDefaults.has(name)) selectedDefaults.delete(name);
+      else selectedDefaults.add(name);
+      chip.className = 'default-chip' + (selectedDefaults.has(name) ? ' selected' : '');
+      updateSelectedCount();
+    };
+    grid.appendChild(chip);
+  });
+  updateSelectedCount();
+}
+
+function updateSelectedCount() {
+  const n = selectedDefaults.size;
+  document.getElementById('selectedCount').innerHTML =
+    `<strong>${n}</strong> bar${n !== 1 ? 's' : ''} selected`;
+}
+
+function selectAllChips() {
+  DEFAULT_BARS.forEach(b => selectedDefaults.add(b));
+  document.querySelectorAll('.default-chip').forEach(c => c.className = 'default-chip selected');
+  updateSelectedCount();
+}
+
+function selectNoneChips() {
+  selectedDefaults.clear();
+  document.querySelectorAll('.default-chip').forEach(c => c.className = 'default-chip');
+  updateSelectedCount();
+}
+
+function loadSelectedDefaults() {
+  if (selectedDefaults.size === 0) { showToast('Select at least one bar first'); return; }
+  send({ type: 'load_defaults', selected: [...selectedDefaults] });
+}
+
+function setListMode(mode) {
+  listMode = mode;
+  document.getElementById('tabDefault').className = 'mode-tab' + (mode === 'default' ? ' active' : '');
+  document.getElementById('tabCustom').className = 'mode-tab' + (mode === 'custom' ? ' active' : '');
+  document.getElementById('defaultModePanel').style.display = mode === 'default' ? '' : 'none';
+  document.getElementById('customModePanel').style.display = mode === 'custom' ? '' : 'none';
+  // If switching to custom, clear server bars so it's a fresh list
+  if (mode === 'custom' && roomState && roomState.bars.length > 0) {
+    if (confirm('Switch to a custom list? This will clear the current bar list.')) {
+      send({ type: 'clear_bars' });
+    } else {
+      setListMode('default'); // revert
+    }
+  }
+}
+
+const WS_URL = location.protocol === 'https:'
+  ? 'wss://' + location.host
+  : 'ws://' + location.host;
+
+// ── WebSocket ─────────────────────────────────────────────────────
+function connect(code, username, onReady) {
+  setBadge('connecting');
+  ws = new WebSocket(WS_URL);
+  ws.onopen = () => {
+    setBadge('connected');
+    ws.send(JSON.stringify({ type: 'join', code, username }));
+    if (onReady) onReady();
+  };
+  ws.onmessage = e => handleMessage(JSON.parse(e.data));
+  ws.onclose = () => {
+    setBadge('disconnected');
+    setTimeout(() => connect(code, username), 3000);
+  };
+  ws.onerror = () => ws.close();
+}
+
+function send(msg) {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg));
+}
+
+function handleMessage(msg) {
+  if (msg.type === 'you') {
+    myPlayerId = msg.playerId;
+    isHost = msg.isHost;
+  } else if (msg.type === 'room_state') {
+    roomState = msg;
+    applyRoomState();
+  } else if (msg.type === 'add') {
+    if (roomState) {
+      roomState.bars.push(msg.bar);
+      applyRoomState();
+    }
+  } else if (msg.type === 'error') {
+    setEntryError(msg.message);
+  }
+}
+
+// ── Apply state ───────────────────────────────────────────────────
+function applyRoomState() {
+  if (!roomState) return;
+  const s = roomState.state;
+  isHost = myPlayerId === roomState.host;
+
+  if (s === 'lobby') {
+    showScreen('waitingScreen');
+    renderWaiting();
+  } else if (s === 'playing' || s === 'done') {
+    showScreen('gameScreen');
+    renderGame();
+  }
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ── WAITING ROOM render ───────────────────────────────────────────
+function renderWaiting() {
+  const s = roomState;
+  document.getElementById('waitingRoomCode').textContent = roomCode;
+  document.getElementById('gamePillCode').textContent = roomCode;
+
+  // Players
+  const players = s.players;
+  document.getElementById('playersLbl').textContent = `Players (${players.length})`;
+  const list = document.getElementById('playerList');
+  list.innerHTML = '';
+  players.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'player-item';
+    const badges = [];
+    if (p.id === s.host) badges.push('<span class="player-badge host">Host</span>');
+    if (p.id === myPlayerId) badges.push('<span class="player-badge you">You</span>');
+    div.innerHTML = `
+      <div class="player-dot ${p.connected ? 'connected' : 'disconnected'}"></div>
+      <div class="player-name">${esc(p.username)}</div>
+      ${badges.join('')}
+    `;
+    list.appendChild(div);
+  });
+
+  // Bars -- render confirmed bars in the active list for the current mode
+  const bars = s.bars;
+
+  // Default mode: show confirmed bars below the chip picker
+  const defaultBarList = document.getElementById('waitingBarList');
+  if (listMode === 'default') {
+    if (bars.length === 0) {
+      defaultBarList.innerHTML = '';
+    } else {
+      defaultBarList.innerHTML = '';
+      bars.forEach(bar => {
+        const div = document.createElement('div');
+        div.className = 'waiting-bar-item';
+        div.innerHTML = `
+          <div class="waiting-bar-name">${esc(bar.name)}</div>
+          <button class="waiting-bar-del" onclick="send({type:'delete',id:'${bar.id}'})" title="Remove">🗑</button>
+        `;
+        defaultBarList.appendChild(div);
+      });
+    }
+  }
+
+  // Custom mode bar list
+  const customBarList = document.getElementById('customBarList');
+  if (listMode === 'custom') {
+    if (bars.length === 0) {
+      customBarList.innerHTML = `<div class="empty" style="padding:20px 0"><div class="empty-icon">🍸</div>Add your own bars above</div>`;
+    } else {
+      customBarList.innerHTML = '';
+      bars.forEach(bar => {
+        const div = document.createElement('div');
+        div.className = 'waiting-bar-item';
+        div.innerHTML = `
+          <div class="waiting-bar-name">${esc(bar.name)}</div>
+          <button class="waiting-bar-del" onclick="send({type:'delete',id:'${bar.id}'})" title="Remove">🗑</button>
+        `;
+        customBarList.appendChild(div);
+      });
+    }
+  }
+
+  // Start controls
+  const canStart = bars.length >= 2 && players.length >= 1;
+  if (isHost) {
+    document.getElementById('hostStartArea').style.display = '';
+    document.getElementById('guestWaitArea').style.display = 'none';
+    const btn = document.getElementById('startBtn');
+    btn.disabled = !canStart;
+    let notice = '';
+    if (bars.length < 2) notice = `Need at least <strong>2 bars</strong> to start`;
+    else notice = `${players.length} player${players.length !== 1 ? 's' : ''} in the room — ready to go!`;
+    document.getElementById('startNotice').innerHTML = notice;
+  } else {
+    document.getElementById('hostStartArea').style.display = 'none';
+    document.getElementById('guestWaitArea').style.display = '';
+  }
+}
+
+// ── GAME render ───────────────────────────────────────────────────
+function renderGame() {
+  const s = roomState;
+  const bars = s.bars;
+  const players = s.players;
+  const active = bars.filter(b => !b.eliminated);
+  const elim = bars.filter(b => b.eliminated);
+  const isDone = s.state === 'done';
+
+  document.getElementById('gamePillCode').textContent = roomCode;
+  const online = players.filter(p => p.connected).length;
+  document.getElementById('gamePillCount').textContent = online + ' online';
+
+  // Turn logic
+  const len = players.length;
+  const currentTurnPlayer = isDone ? null : (() => {
+    let idx = s.turnIndex % len;
+    for (let i = 0; i < len; i++) {
+      const p = players[(idx + i) % len];
+      if (p.connected) return p;
+    }
+    return players[idx % len];
+  })();
+  const isMyTurn = !isDone && currentTurnPlayer && currentTurnPlayer.id === myPlayerId;
+
+  // Turn banner
+  const banner = document.getElementById('turnBanner');
+  const turnLabel = document.getElementById('turnLabel');
+  const turnMessage = document.getElementById('turnMessage');
+  const turnSub = document.getElementById('turnSub');
+  if (isDone) {
+    banner.style.display = 'none';
+  } else {
+    banner.style.display = '';
+    if (isMyTurn) {
+      banner.className = 'turn-banner my-turn';
+      turnLabel.textContent = 'Your Turn';
+      turnMessage.textContent = 'Pick a bar to eliminate';
+      turnSub.textContent = 'Tap ✕ on any bar below';
+    } else {
+      banner.className = 'turn-banner waiting';
+      turnLabel.textContent = 'Waiting';
+      turnMessage.textContent = `${currentTurnPlayer ? esc(currentTurnPlayer.username) : '—'} is choosing...`;
+      turnSub.textContent = 'Sit tight — your turn is coming';
+    }
+  }
+
+  // Turn order strip
+  const strip = document.getElementById('turnOrder');
+  strip.innerHTML = '';
+  players.forEach((p, i) => {
+    const isActive = !isDone && currentTurnPlayer && p.id === currentTurnPlayer.id;
+    const chip = document.createElement('div');
+    let cls = 'turn-chip';
+    if (isActive) cls += ' active-turn';
+    if (p.id === myPlayerId) cls += ' you-chip';
+    if (!p.connected) cls += ' disconnected-chip';
+    chip.className = cls;
+    chip.textContent = p.id === myPlayerId ? p.username + ' (you)' : p.username;
+    strip.appendChild(chip);
+  });
+
+  // Winner banner
+  const winnerBanner = document.getElementById('winnerBanner');
+  if (isDone && active.length === 1) {
+    winnerBanner.classList.add('visible');
+    document.getElementById('winnerName').textContent = active[0].name;
+    if (prevWinnerId !== active[0].id) {
+      launchConfetti();
+      showToast('🍺 ' + active[0].name + ' wins!');
+      prevWinnerId = active[0].id;
+    }
+  } else {
+    winnerBanner.classList.remove('visible');
+    prevWinnerId = null;
+  }
+
+  // Stats
+  document.getElementById('statLeft').textContent = active.length;
+  document.getElementById('statElim').textContent = elim.length;
+  document.getElementById('gameBarsLbl').textContent = `Bars (${active.length} left)`;
+
+  // Bar list
+  const gameBarList = document.getElementById('gameBarList');
+  if (active.length === 0 && !isDone) {
+    gameBarList.innerHTML = `<div class="empty"><div class="empty-icon">🏁</div>All bars eliminated!</div>`;
+  } else {
+    gameBarList.innerHTML = '';
+    active.forEach(bar => {
+      const isWinner = isDone && active.length === 1;
+      const div = document.createElement('div');
+      div.className = 'bar-item' + (isWinner ? ' winner' : '');
+      div.innerHTML = `
+        <button class="elim-btn" ${isMyTurn && !isDone ? '' : 'disabled'}
+          onclick="send({type:'eliminate',id:'${bar.id}'})"
+          title="${isMyTurn ? 'Eliminate' : 'Not your turn'}">✕</button>
+        <div class="bar-name">${esc(bar.name)}</div>
+      `;
+      gameBarList.appendChild(div);
+    });
+  }
+
+  // Eliminated section
+  const elimSection = document.getElementById('elimSection');
+  document.getElementById('elimLbl').textContent = `Eliminated (${elim.length})`;
+  if (elim.length > 0) {
+    elimSection.style.display = '';
+    const elimBarList = document.getElementById('elimBarList');
+    elimBarList.innerHTML = '';
+    elim.forEach(bar => {
+      const div = document.createElement('div');
+      div.className = 'bar-item eliminated';
+      div.innerHTML = `<div class="bar-name" style="padding-left:16px">${esc(bar.name)}</div>`;
+      elimBarList.appendChild(div);
+    });
+  } else {
+    elimSection.style.display = 'none';
+  }
+
+  // Actions (host only)
+  const gameActions = document.getElementById('gameActions');
+  if (isHost) {
+    gameActions.style.display = '';
+    document.getElementById('playAgainBtn').disabled = false;
+    document.getElementById('clearBtn').disabled = false;
+  } else {
+    gameActions.style.display = 'none';
+  }
+}
+
+// ── Entry ─────────────────────────────────────────────────────────
+function generateCode() {
+  const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({length: 5}, () => c[Math.floor(Math.random() * c.length)]).join('');
+}
+
+function createRoom() {
+  const username = document.getElementById('createUsername').value.trim();
+  if (!username) { setEntryError('Enter your name'); return; }
+  roomCode = generateCode();
+  myUsername = username;
+  enterRoom(roomCode, username);
+}
+
+function joinRoom() {
+  const code = document.getElementById('joinCode').value.trim().toUpperCase().replace(/\s/g, '');
+  const username = document.getElementById('joinUsername').value.trim();
+  if (!code) { setEntryError('Enter the room code'); return; }
+  if (!username) { setEntryError('Enter your name'); return; }
+  roomCode = code;
+  myUsername = username;
+  enterRoom(code, username);
+}
+
+function enterRoom(code, username) {
+  connect(code, username, () => {
+    showScreen('waitingScreen');
+  });
+}
+
+function setEntryError(msg) {
+  const el = document.getElementById('entryError');
+  el.textContent = msg;
+  setTimeout(() => el.textContent = '', 3000);
+}
+
+// ── Game actions ──────────────────────────────────────────────────
+function addBar() {
+  const input = document.getElementById('waitingBarInput');
+  const name = input.value.trim();
+  if (!name) { input.focus(); return; }
+  if (roomState && roomState.bars.find(b => b.name.toLowerCase() === name.toLowerCase())) {
+    showToast('Already on the list!'); input.select(); return;
+  }
+  send({ type: 'add', name });
+  input.value = '';
+  input.focus();
+}
+
+function startGame() { send({ type: 'start_game' }); }
+function playAgain() { send({ type: 'play_again' }); }
+function confirmClear() {
+  if (confirm('Clear all bars and start over?')) send({ type: 'clear_all' });
+}
+function toggleElim() {
+  elimOpen = !elimOpen;
+  document.getElementById('elimBarList').style.display = elimOpen ? '' : 'none';
+  document.getElementById('elimArrow').classList.toggle('open', elimOpen);
+}
+
+function copyLink() {
+  const url = location.origin + location.pathname + '?room=' + roomCode;
+  navigator.clipboard.writeText(url).then(() => showToast('🔗 Invite link copied!'));
+}
+
+// ── Utilities ─────────────────────────────────────────────────────
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function setBadge(state) {
+  const b = document.getElementById('connBadge');
+  b.className = 'conn-badge ' + state;
+  b.textContent = { connected: 'Live', connecting: 'Connecting...', disconnected: 'Reconnecting...' }[state];
+}
+
+let toastT;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastT);
+  toastT = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+function launchConfetti() {
+  const canvas = document.getElementById('confettiCanvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+  const pieces = Array.from({length: 100}, () => ({
+    x: Math.random() * canvas.width, y: -10 - Math.random() * 120,
+    r: 4 + Math.random() * 5, d: 2.5 + Math.random() * 2.5,
+    c: ['#e8a435','#f5cc70','#2d9e5f','#ffffff','#f39c12','#e55039','#3498db'][Math.floor(Math.random()*7)],
+    tilt: Math.random() * 12 - 6, ts: 0.08 + Math.random() * 0.18,
+  }));
+  let f = 0;
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    pieces.forEach(p => {
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, p.r, p.r * 0.45, p.tilt, 0, Math.PI * 2);
+      ctx.fillStyle = p.c; ctx.fill();
+      p.y += p.d; p.x += Math.sin(f * 0.02 + p.tilt) * 0.7; p.tilt += p.ts;
+    });
+    f++;
+    if (f < 220) requestAnimationFrame(draw);
+    else ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  draw();
+}
+
+// ── Auto-join from URL ────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  initDefaultChips();
+  const params = new URLSearchParams(location.search);
+  const r = params.get('room');
+  if (r) {
+    document.getElementById('joinCode').value = r.toUpperCase();
+    document.getElementById('joinUsername').focus();
+  }
+});
+
+// ── Enter keys ────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const active = document.activeElement;
+  if (active.id === 'createUsername') createRoom();
+  else if (active.id === 'joinCode' || active.id === 'joinUsername') joinRoom();
+  else if (active.id === 'waitingBarInput') addBar();
+});
+</script>
+</body>
+</html>
