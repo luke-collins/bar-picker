@@ -486,6 +486,48 @@
   .recent-elim-item .rei-bar { color: var(--text); font-weight: 500; text-decoration: line-through; text-decoration-color: var(--red); text-decoration-thickness: 2px; }
   .recent-elim-item .rei-by { font-size: 11px; margin-top: 1px; }
 
+  /* hamburger / nav menu */
+  .hamburger-btn {
+    background: none; border: none; color: var(--text-muted); font-size: 20px;
+    cursor: pointer; padding: 4px 6px; line-height: 1; border-radius: 6px;
+    transition: color 0.15s, background 0.15s; flex-shrink: 0;
+  }
+  .hamburger-btn:hover { color: var(--text); background: var(--surface2); }
+
+  .menu-overlay {
+    display: none; position: fixed; inset: 0; z-index: 9995;
+    background: rgba(0,0,0,0.45);
+  }
+  .menu-overlay.open { display: block; }
+
+  .menu-panel {
+    position: fixed; top: 0; left: 0; bottom: 0; width: 220px;
+    background: var(--surface); border-right: 1px solid var(--border2);
+    z-index: 9996; display: flex; flex-direction: column;
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
+  }
+  .menu-panel.open { transform: translateX(0); }
+  .menu-panel-header {
+    padding: 24px 20px 16px; border-bottom: 1px solid var(--border2);
+    font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 2px;
+    background: linear-gradient(135deg, var(--amber), var(--gold));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .menu-item {
+    background: none; border: none; color: var(--text);
+    font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 500;
+    cursor: pointer; padding: 14px 20px; text-align: left; width: 100%;
+    transition: background 0.15s; display: flex; align-items: center; gap: 12px;
+  }
+  .menu-item:hover { background: var(--surface2); }
+
+  /* waiting screen topbar */
+  .waiting-topbar {
+    max-width: 480px; margin: 0 auto; padding: 14px 16px 0;
+    display: flex; align-items: center;
+  }
+
   /* maps link in winner banner */
   .winner-maps-link {
     display: inline-block; margin-top: 7px; font-size: 12px;
@@ -500,6 +542,12 @@
 <canvas id="confettiCanvas"></canvas>
 <div class="toast" id="toast"></div>
 <div class="conn-badge connecting" id="connBadge">Connecting...</div>
+
+<div class="menu-overlay" id="menuOverlay" onclick="closeMenu()"></div>
+<div class="menu-panel" id="menuPanel">
+  <div class="menu-panel-header">Bar Picker</div>
+  <button class="menu-item" onclick="goHome()">⌂&nbsp; Home</button>
+</div>
 
 <!-- ── ENTRY SCREEN ─────────────────────────────────────────────── -->
 <div id="entryScreen" class="screen active">
@@ -532,6 +580,9 @@
 
 <!-- ── WAITING SCREEN ──────────────────────────────────────────── -->
 <div id="waitingScreen" class="screen">
+  <div class="waiting-topbar">
+    <button class="hamburger-btn" onclick="toggleMenu()" title="Menu">☰</button>
+  </div>
   <div class="waiting-header">
     <div class="waiting-logo">Bar Picker</div>
     <div style="font-size:11px;color:var(--text-muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">Room Code</div>
@@ -546,38 +597,48 @@
   </div>
 
   <div class="waiting-section">
-    <div class="list-mode-header">
-      <div class="section-label" style="margin-bottom:0">Bars</div>
-      <div class="mode-toggle">
-        <button class="mode-tab active" id="tabDefault" onclick="setListMode('default')">Our Spots</button>
-        <button class="mode-tab" id="tabCustom" onclick="setListMode('custom')">Custom List</button>
-      </div>
-    </div>
-
-    <!-- DEFAULT mode: chip picker -->
-    <div id="defaultModePanel">
-      <div class="default-bars-grid" id="defaultChipsGrid"></div>
-      <div class="selected-count" id="selectedCount">0 bars selected</div>
-      <div class="chip-actions">
-        <button class="chip-action-btn" onclick="selectAllChips()">Select All</button>
-        <button class="chip-action-btn" onclick="selectNoneChips()">Clear</button>
-        <button class="chip-action-btn confirm" onclick="loadSelectedDefaults()">Use These Bars →</button>
-      </div>
-      <div class="bar-list" id="waitingBarList" style="margin-top:4px"></div>
-    </div>
-
-    <!-- CUSTOM mode: manual add -->
-    <div id="customModePanel" style="display:none">
-      <div class="add-form">
-        <input class="add-input" id="waitingBarInput" type="text" maxlength="60" placeholder="Bar or restaurant name..." autocomplete="off" />
-        <button class="add-btn" onclick="addBar()">ADD</button>
-      </div>
-      <div class="bar-list" id="customBarList">
-        <div class="empty" style="padding:20px 0">
-          <div class="empty-icon">🍸</div>
-          Add your own bars above
+    <!-- Host-only bar controls -->
+    <div id="hostBarControls">
+      <div class="list-mode-header">
+        <div class="section-label" style="margin-bottom:0">Bars</div>
+        <div class="mode-toggle">
+          <button class="mode-tab active" id="tabDefault" onclick="setListMode('default')">Our Spots</button>
+          <button class="mode-tab" id="tabCustom" onclick="setListMode('custom')">Custom List</button>
         </div>
       </div>
+
+      <!-- DEFAULT mode: chip picker -->
+      <div id="defaultModePanel">
+        <div class="default-bars-grid" id="defaultChipsGrid"></div>
+        <div class="selected-count" id="selectedCount">0 bars selected</div>
+        <div class="chip-actions">
+          <button class="chip-action-btn" onclick="selectAllChips()">Select All</button>
+          <button class="chip-action-btn" onclick="selectNoneChips()">Clear</button>
+          <button class="chip-action-btn confirm" onclick="loadSelectedDefaults()">Use These Bars →</button>
+        </div>
+        <div class="bar-list" id="waitingBarList" style="margin-top:4px"></div>
+      </div>
+
+      <!-- CUSTOM mode: manual add -->
+      <div id="customModePanel" style="display:none">
+        <div class="add-form">
+          <input class="add-input" id="waitingBarInput" type="text" maxlength="60" placeholder="Bar or restaurant name..." autocomplete="off" />
+          <button class="add-btn" onclick="addBar()">ADD</button>
+        </div>
+        <div class="bar-list" id="customBarList">
+          <div class="empty" style="padding:20px 0">
+            <div class="empty-icon">🍸</div>
+            Add your own bars above
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Guest read-only bar view -->
+    <div id="guestBarView" style="display:none">
+      <div class="section-label">Bars</div>
+      <div class="bar-list" id="guestBarList"></div>
+      <div class="start-notice" id="guestBarHint">The host is choosing which bars to include.</div>
     </div>
   </div>
 
@@ -593,7 +654,10 @@
 <!-- ── GAME SCREEN ─────────────────────────────────────────────── -->
 <div id="gameScreen" class="screen">
   <div class="topbar">
-    <div class="topbar-logo">Bar Picker</div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button class="hamburger-btn" onclick="toggleMenu()" title="Menu">☰</button>
+      <div class="topbar-logo">Bar Picker</div>
+    </div>
     <div class="room-pill" onclick="copyLink()" title="Copy invite link">
       <div class="pill-dot"></div>
       <div class="pill-code" id="gamePillCode">—</div>
@@ -823,15 +887,16 @@ function renderWaiting() {
     list.appendChild(div);
   });
 
-  // Bars -- render confirmed bars in the active list for the current mode
+  // Bars -- host sees full controls, guests see a read-only list
   const bars = s.bars;
 
-  // Default mode: show confirmed bars below the chip picker
-  const defaultBarList = document.getElementById('waitingBarList');
-  if (listMode === 'default') {
-    if (bars.length === 0) {
-      defaultBarList.innerHTML = '';
-    } else {
+  if (isHost) {
+    document.getElementById('hostBarControls').style.display = '';
+    document.getElementById('guestBarView').style.display = 'none';
+
+    // Default mode: show confirmed bars below the chip picker
+    const defaultBarList = document.getElementById('waitingBarList');
+    if (listMode === 'default') {
       defaultBarList.innerHTML = '';
       bars.forEach(bar => {
         const div = document.createElement('div');
@@ -843,24 +908,41 @@ function renderWaiting() {
         defaultBarList.appendChild(div);
       });
     }
-  }
 
-  // Custom mode bar list
-  const customBarList = document.getElementById('customBarList');
-  if (listMode === 'custom') {
+    // Custom mode bar list
+    const customBarList = document.getElementById('customBarList');
+    if (listMode === 'custom') {
+      if (bars.length === 0) {
+        customBarList.innerHTML = `<div class="empty" style="padding:20px 0"><div class="empty-icon">🍸</div>Add your own bars above</div>`;
+      } else {
+        customBarList.innerHTML = '';
+        bars.forEach(bar => {
+          const div = document.createElement('div');
+          div.className = 'waiting-bar-item';
+          div.innerHTML = `
+            <div class="waiting-bar-name">${esc(bar.name)}</div>
+            <button class="waiting-bar-del" onclick="send({type:'delete',id:'${bar.id}'})" title="Remove">🗑</button>
+          `;
+          customBarList.appendChild(div);
+        });
+      }
+    }
+  } else {
+    document.getElementById('hostBarControls').style.display = 'none';
+    document.getElementById('guestBarView').style.display = '';
+    const guestBarList = document.getElementById('guestBarList');
+    const guestBarHint = document.getElementById('guestBarHint');
+    guestBarList.innerHTML = '';
     if (bars.length === 0) {
-      customBarList.innerHTML = `<div class="empty" style="padding:20px 0"><div class="empty-icon">🍸</div>Add your own bars above</div>`;
+      guestBarHint.textContent = 'The host is choosing which bars to include.';
     } else {
-      customBarList.innerHTML = '';
       bars.forEach(bar => {
         const div = document.createElement('div');
         div.className = 'waiting-bar-item';
-        div.innerHTML = `
-          <div class="waiting-bar-name">${esc(bar.name)}</div>
-          <button class="waiting-bar-del" onclick="send({type:'delete',id:'${bar.id}'})" title="Remove">🗑</button>
-        `;
-        customBarList.appendChild(div);
+        div.innerHTML = `<div class="waiting-bar-name">${esc(bar.name)}</div>`;
+        guestBarList.appendChild(div);
       });
+      guestBarHint.textContent = `${bars.length} bar${bars.length !== 1 ? 's' : ''} selected by host`;
     }
   }
 
@@ -1095,6 +1177,26 @@ function toggleElim() {
 function copyLink() {
   const url = location.origin + location.pathname + '?room=' + roomCode;
   navigator.clipboard.writeText(url).then(() => showToast('🔗 Invite link copied!'));
+}
+
+function toggleMenu() {
+  const panel = document.getElementById('menuPanel');
+  const isOpen = panel.classList.contains('open');
+  panel.classList.toggle('open', !isOpen);
+  document.getElementById('menuOverlay').classList.toggle('open', !isOpen);
+}
+
+function closeMenu() {
+  document.getElementById('menuPanel').classList.remove('open');
+  document.getElementById('menuOverlay').classList.remove('open');
+}
+
+function goHome() {
+  closeMenu();
+  if (ws) { ws.onclose = null; ws.close(); ws = null; }
+  myPlayerId = null; myUsername = null; isHost = false;
+  roomCode = null; roomState = null;
+  showScreen('entryScreen');
 }
 
 // ── Utilities ─────────────────────────────────────────────────────
