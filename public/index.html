@@ -475,6 +475,24 @@
     0%, 100% { opacity: 1; } 50% { opacity: 0.6; }
   }
   .pulsing { animation: pulse 1.4s ease-in-out infinite; }
+
+  /* recent elim feed */
+  .recent-elim-feed { margin-bottom: 14px; display: flex; flex-direction: column; gap: 6px; }
+  .recent-elim-item {
+    border-left: 3px solid var(--red); padding: 7px 12px;
+    background: var(--red-bg); border-radius: 0 8px 8px 0;
+    font-size: 13px; color: var(--text-muted);
+  }
+  .recent-elim-item .rei-bar { color: var(--text); font-weight: 500; text-decoration: line-through; text-decoration-color: var(--red); text-decoration-thickness: 2px; }
+  .recent-elim-item .rei-by { font-size: 11px; margin-top: 1px; }
+
+  /* maps link in winner banner */
+  .winner-maps-link {
+    display: inline-block; margin-top: 7px; font-size: 12px;
+    color: var(--green); text-decoration: none; position: relative;
+    letter-spacing: 0.2px;
+  }
+  .winner-maps-link:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -593,6 +611,7 @@
   <div class="winner-banner" id="winnerBanner">
     <div class="winner-lbl">🏆 Tonight's Bar</div>
     <div class="winner-name" id="winnerName">—</div>
+    <a class="winner-maps-link" id="winnerMapsLink" href="#" target="_blank" rel="noopener">📍 Find on Google Maps</a>
     <div class="winner-icon">🍺</div>
   </div>
 
@@ -607,6 +626,9 @@
       <div class="stat-label">Eliminated</div>
     </div>
   </div>
+
+  <!-- Recent eliminations feed -->
+  <div class="recent-elim-feed" id="recentElimFeed" style="display:none"></div>
 
   <!-- Active bars label -->
   <div class="section-label" id="gameBarsLbl">Bars</div>
@@ -643,7 +665,7 @@ let listMode = 'default'; // 'default' | 'custom'
 let selectedDefaults = new Set();
 
 const DEFAULT_BARS = [
-  'Bulldog (Uptown)', 'BBG', 'Yacht Club', 'The Coup Yard', "Bruno's",
+  'Bulldog (Uptown)', 'BBG', 'Yacht Club', 'The Tchoup Yard', "Bruno's",
   'Bulldog (Mid City)', 'Urban South', 'Wrong Iron', 'Monkey Hill',
   'Rendezvous', "Mick's", "Fat Harry's", 'Parasols', 'Port Orleans',
   "Lucy's", 'Hog Alley', 'Finn McCools', 'Parlays', 'Cooter Browns',
@@ -922,6 +944,8 @@ function renderGame() {
   if (isDone && active.length === 1) {
     winnerBanner.classList.add('visible');
     document.getElementById('winnerName').textContent = active[0].name;
+    const mapsUrl = 'https://www.google.com/maps/search/' + encodeURIComponent(active[0].name + ' New Orleans LA');
+    document.getElementById('winnerMapsLink').href = mapsUrl;
     if (prevWinnerId !== active[0].id) {
       launchConfetti();
       showToast('🍺 ' + active[0].name + ' wins!');
@@ -957,17 +981,36 @@ function renderGame() {
     });
   }
 
-  // Eliminated section
+  // Recent elim feed (last 2, most recent first)
+  const elimLog = s.eliminationLog || [];
+  const recentFeed = document.getElementById('recentElimFeed');
+  if (elimLog.length > 0 && !isDone) {
+    recentFeed.style.display = '';
+    recentFeed.innerHTML = '';
+    const recent = elimLog.slice(-2).reverse();
+    recent.forEach(entry => {
+      const div = document.createElement('div');
+      div.className = 'recent-elim-item';
+      div.innerHTML = `<div class="rei-bar">${esc(entry.barName)}</div><div class="rei-by">eliminated by ${esc(entry.byUsername)}</div>`;
+      recentFeed.appendChild(div);
+    });
+  } else {
+    recentFeed.style.display = 'none';
+    recentFeed.innerHTML = '';
+  }
+
+  // Eliminated section (eliminationLog order, most recent first)
   const elimSection = document.getElementById('elimSection');
   document.getElementById('elimLbl').textContent = `Eliminated (${elim.length})`;
   if (elim.length > 0) {
     elimSection.style.display = '';
     const elimBarList = document.getElementById('elimBarList');
     elimBarList.innerHTML = '';
-    elim.forEach(bar => {
+    const logReversed = [...elimLog].reverse();
+    logReversed.forEach(entry => {
       const div = document.createElement('div');
       div.className = 'bar-item eliminated';
-      div.innerHTML = `<div class="bar-name" style="padding-left:16px">${esc(bar.name)}</div>`;
+      div.innerHTML = `<div class="bar-name" style="padding-left:16px">${esc(entry.barName)} <span style="font-size:11px;color:var(--text-muted);font-style:italic">— ${esc(entry.byUsername)}</span></div>`;
       elimBarList.appendChild(div);
     });
   } else {

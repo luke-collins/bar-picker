@@ -11,7 +11,7 @@ const wss = new WebSocketServer({ server });
 app.use(express.static(path.join(__dirname, 'public')));
 
 const DEFAULT_BARS = [
-  'Bulldog (Uptown)', 'BBG', 'Yacht Club', 'The Coup Yard', "Bruno's",
+  'Bulldog (Uptown)', 'BBG', 'Yacht Club', 'The Tchoup Yard', "Bruno's",
   'Bulldog (Mid City)', 'Urban South', 'Wrong Iron', 'Monkey Hill',
   'Rendezvous', "Mick's", "Fat Harry's", 'Parasols', 'Port Orleans',
   "Lucy's", 'Hog Alley', 'Finn McCools', 'Parlays', 'Cooter Browns',
@@ -37,6 +37,7 @@ function getRoom(code) {
       state: 'lobby',
       turnIndex: 0,
       host: null,       // first player id
+      eliminationLog: [],
     });
   }
   return rooms.get(code);
@@ -57,6 +58,7 @@ function roomSummary(room) {
     players: room.players.map(p => ({ id: p.id, username: p.username, connected: p.connected })),
     turnIndex: room.turnIndex,
     host: room.host,
+    eliminationLog: room.eliminationLog,
   };
 }
 
@@ -177,6 +179,13 @@ wss.on('connection', (ws) => {
       const bar = currentRoom.bars.find(b => b.id === msg.id && !b.eliminated);
       if (!bar) return;
       bar.eliminated = true;
+      const eliminator = currentRoom.players.find(p => p.id === myPlayerId);
+      currentRoom.eliminationLog.push({
+        barId: bar.id,
+        barName: bar.name,
+        byPlayerId: myPlayerId,
+        byUsername: eliminator ? eliminator.username : '?',
+      });
 
       // Advance turn
       currentRoom.turnIndex = (currentRoom.turnIndex + 1) % currentRoom.players.length;
@@ -203,6 +212,7 @@ wss.on('connection', (ws) => {
       currentRoom.bars.forEach(b => b.eliminated = false);
       currentRoom.state = 'lobby';
       currentRoom.turnIndex = 0;
+      currentRoom.eliminationLog = [];
       broadcastAll(currentRoom, roomSummary(currentRoom));
     }
 
@@ -212,6 +222,7 @@ wss.on('connection', (ws) => {
       currentRoom.bars = [];
       currentRoom.state = 'lobby';
       currentRoom.turnIndex = 0;
+      currentRoom.eliminationLog = [];
       broadcastAll(currentRoom, roomSummary(currentRoom));
     }
 
@@ -221,6 +232,7 @@ wss.on('connection', (ws) => {
       currentRoom.bars.forEach(b => b.eliminated = false);
       currentRoom.state = 'lobby';
       currentRoom.turnIndex = 0;
+      currentRoom.eliminationLog = [];
       broadcastAll(currentRoom, roomSummary(currentRoom));
     }
   });
