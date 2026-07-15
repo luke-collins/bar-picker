@@ -283,7 +283,6 @@
     display: flex; align-items: center; justify-content: space-between;
     padding: 16px 0 14px; border-bottom: 1px solid var(--border); margin-bottom: 18px;
     padding-top: calc(16px + env(safe-area-inset-top));
-    background: red; /* TEMP DEBUG: remove after confirming safe-area boundary on device */
   }
   .topbar-logo {
     font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 2px;
@@ -450,9 +449,8 @@
 
   /* conn badge */
   .conn-badge {
-    position: fixed; top: calc(13px + env(safe-area-inset-top)); right: calc(13px + env(safe-area-inset-right));
     font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
-    padding: 4px 10px; border-radius: 20px; z-index: 100;
+    padding: 4px 10px; border-radius: 20px; flex-shrink: 0;
     transition: all 0.3s; pointer-events: none;
   }
   .conn-badge.connected { background: rgba(45,158,95,0.12); color: var(--green); border: 1px solid rgba(45,158,95,0.25); }
@@ -551,7 +549,6 @@
 
 <canvas id="confettiCanvas"></canvas>
 <div class="toast" id="toast"></div>
-<div class="conn-badge connecting" id="connBadge">Connecting...</div>
 
 <div class="menu-overlay" id="menuOverlay" onclick="closeMenu()"></div>
 <div class="menu-panel" id="menuPanel">
@@ -668,10 +665,13 @@
       <button class="hamburger-btn" onclick="toggleMenu()" title="Menu">☰</button>
       <div class="topbar-logo">Bar Picker</div>
     </div>
-    <div class="room-pill" onclick="copyLink()" title="Copy invite link">
-      <div class="pill-dot"></div>
-      <div class="pill-code" id="gamePillCode">—</div>
-      <div class="pill-count" id="gamePillCount">—</div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="room-pill" onclick="copyLink()" title="Copy invite link">
+        <div class="pill-dot"></div>
+        <div class="pill-code" id="gamePillCode">—</div>
+        <div class="pill-count" id="gamePillCount">—</div>
+      </div>
+      <div class="conn-badge connecting" id="connBadge">Connecting...</div>
     </div>
   </div>
 
