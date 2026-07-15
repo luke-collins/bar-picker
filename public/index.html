@@ -609,20 +609,38 @@
       <div class="list-mode-header">
         <div class="section-label" style="margin-bottom:0">Bars</div>
         <div class="mode-toggle">
-          <button class="mode-tab active" id="tabDefault" onclick="setListMode('default')">Our Spots</button>
+          <button class="mode-tab active" id="tabFindBars" onclick="setListMode('findbars')">Find Bars</button>
           <button class="mode-tab" id="tabCustom" onclick="setListMode('custom')">Custom List</button>
         </div>
       </div>
 
-      <!-- DEFAULT mode: chip picker -->
-      <div id="defaultModePanel">
-        <div class="default-bars-grid" id="defaultChipsGrid"></div>
-        <div class="selected-count" id="selectedCount">0 bars selected</div>
-        <div class="chip-actions">
-          <button class="chip-action-btn" onclick="selectAllChips()">Select All</button>
-          <button class="chip-action-btn" onclick="selectNoneChips()">Clear</button>
-          <button class="chip-action-btn confirm" onclick="loadSelectedDefaults()">Use These Bars →</button>
+      <!-- FIND BARS mode: live search -->
+      <div id="findBarsPanel">
+        <div class="add-form">
+          <input class="add-input" id="findBarsLocationInput" type="text" maxlength="100" placeholder="City or zip code..." autocomplete="off" />
+          <button class="add-btn" id="findBarsSearchBtn" onclick="searchBars()">SEARCH</button>
         </div>
+        <div class="default-bars-grid" id="findBarsFilterChips"></div>
+
+        <div id="findBarsLoading" style="display:none">
+          <div class="empty">
+            <div class="empty-icon pulsing">🔎</div>
+            Searching for bars nearby...
+          </div>
+        </div>
+
+        <div id="findBarsMessage" style="display:none"></div>
+
+        <div id="findBarsResultsPanel" style="display:none">
+          <div class="default-bars-grid" id="defaultChipsGrid"></div>
+          <div class="selected-count" id="selectedCount">0 bars selected</div>
+          <div class="chip-actions">
+            <button class="chip-action-btn" onclick="selectAllFindBars()">Select All</button>
+            <button class="chip-action-btn" onclick="selectNoneFindBars()">Clear</button>
+            <button class="chip-action-btn confirm" onclick="useFindBarsSelection()">Use These Bars →</button>
+          </div>
+        </div>
+
         <div class="bar-list" id="waitingBarList" style="margin-top:4px"></div>
       </div>
 
@@ -739,73 +757,141 @@ let elimOpen = false;
 let prevWinnerId = null;
 let ws = null;
 let pendingCode = null;
-let listMode = 'default'; // 'default' | 'custom'
-let selectedDefaults = new Set();
+let listMode = 'findbars'; // 'findbars' | 'custom'
 
-const DEFAULT_BARS = [
-  'Bulldog (Uptown)', 'BBG', 'Yacht Club', 'The Tchoup Yard', "Bruno's",
-  'Bulldog (Mid City)', 'Urban South', 'Wrong Iron', 'Monkey Hill',
-  'Rendezvous', "Mick's", "Fat Harry's", 'Parasols', 'Port Orleans',
-  "Lucy's", 'Hog Alley', 'Finn McCools', 'Parlays', 'Cooter Browns',
-  'The Basin', "Manning's", 'Abita', 'MRB'
+let searchResults = []; // last Find Bars search results: [{name, address, rating, placeId}]
+let selectedResultIds = new Set();
+
+const FIND_BARS_FILTERS = [
+  { label: 'Cocktail Bar', term: 'cocktail bar' },
+  { label: 'Dive Bar', term: 'dive bar' },
+  { label: 'Sports Bar', term: 'sports bar' },
+  { label: 'Brewery', term: 'brewery' },
+  { label: 'Wine Bar', term: 'wine bar' },
+  { label: 'Rooftop Bar', term: 'rooftop bar' },
+  { label: 'Live Music', term: 'live music bar' },
+  { label: 'Late Night', term: 'late night bar' },
 ];
+let selectedFilterTerms = new Set();
 
-// Pre-select all defaults
-DEFAULT_BARS.forEach(b => selectedDefaults.add(b));
+function initFindBarsFilters() {
+  const wrap = document.getElementById('findBarsFilterChips');
+  wrap.innerHTML = '';
+  FIND_BARS_FILTERS.forEach(f => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'default-chip';
+    chip.textContent = f.label;
+    chip.onclick = () => {
+      if (selectedFilterTerms.has(f.term)) selectedFilterTerms.delete(f.term);
+      else selectedFilterTerms.add(f.term);
+      chip.className = 'default-chip' + (selectedFilterTerms.has(f.term) ? ' selected' : '');
+    };
+    wrap.appendChild(chip);
+  });
+}
 
-function initDefaultChips() {
+async function searchBars() {
+  const input = document.getElementById('findBarsLocationInput');
+  const location = input.value.trim();
+  if (!location) { input.focus(); showToast('Enter a city or zip code first'); return; }
+
+  setFindBarsState('loading');
+  const btn = document.getElementById('findBarsSearchBtn');
+  btn.disabled = true;
+
+  try {
+    const res = await fetch('/api/find-bars', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ location, filters: [...selectedFilterTerms] }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setFindBarsState('error', data.error || 'Something went wrong. Try again.');
+      return;
+    }
+    searchResults = Array.isArray(data) ? data : [];
+    if (searchResults.length === 0) {
+      setFindBarsState('empty');
+      return;
+    }
+    selectedResultIds = new Set(searchResults.map(p => p.placeId));
+    renderFindBarsResults();
+    setFindBarsState('results');
+  } catch (err) {
+    setFindBarsState('error', 'Could not reach the server. Check your connection and try again.');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function setFindBarsState(state, message) {
+  document.getElementById('findBarsLoading').style.display = state === 'loading' ? '' : 'none';
+  const msgEl = document.getElementById('findBarsMessage');
+  if (state === 'error' || state === 'empty') {
+    msgEl.style.display = '';
+    msgEl.innerHTML = `<div class="empty"><div class="empty-icon">${state === 'error' ? '⚠️' : '🔍'}</div>${esc(message || 'No bars found. Try a different search.')}</div>`;
+  } else {
+    msgEl.style.display = 'none';
+  }
+  document.getElementById('findBarsResultsPanel').style.display = state === 'results' ? '' : 'none';
+}
+
+function renderFindBarsResults() {
   const grid = document.getElementById('defaultChipsGrid');
   grid.innerHTML = '';
-  DEFAULT_BARS.forEach(name => {
+  searchResults.forEach(place => {
     const chip = document.createElement('button');
-    chip.className = 'default-chip' + (selectedDefaults.has(name) ? ' selected' : '');
-    chip.textContent = name;
+    chip.type = 'button';
+    chip.className = 'default-chip' + (selectedResultIds.has(place.placeId) ? ' selected' : '');
+    chip.textContent = place.name + (place.rating ? ` ★${place.rating.toFixed(1)}` : '');
+    chip.title = place.address || '';
     chip.onclick = () => {
-      if (selectedDefaults.has(name)) selectedDefaults.delete(name);
-      else selectedDefaults.add(name);
-      chip.className = 'default-chip' + (selectedDefaults.has(name) ? ' selected' : '');
-      updateSelectedCount();
+      if (selectedResultIds.has(place.placeId)) selectedResultIds.delete(place.placeId);
+      else selectedResultIds.add(place.placeId);
+      chip.className = 'default-chip' + (selectedResultIds.has(place.placeId) ? ' selected' : '');
+      updateFindBarsSelectedCount();
     };
     grid.appendChild(chip);
   });
-  updateSelectedCount();
+  updateFindBarsSelectedCount();
 }
 
-function updateSelectedCount() {
-  const n = selectedDefaults.size;
+function updateFindBarsSelectedCount() {
+  const n = selectedResultIds.size;
   document.getElementById('selectedCount').innerHTML =
     `<strong>${n}</strong> bar${n !== 1 ? 's' : ''} selected`;
 }
 
-function selectAllChips() {
-  DEFAULT_BARS.forEach(b => selectedDefaults.add(b));
-  document.querySelectorAll('.default-chip').forEach(c => c.className = 'default-chip selected');
-  updateSelectedCount();
+function selectAllFindBars() {
+  selectedResultIds = new Set(searchResults.map(p => p.placeId));
+  renderFindBarsResults();
 }
 
-function selectNoneChips() {
-  selectedDefaults.clear();
-  document.querySelectorAll('.default-chip').forEach(c => c.className = 'default-chip');
-  updateSelectedCount();
+function selectNoneFindBars() {
+  selectedResultIds.clear();
+  renderFindBarsResults();
 }
 
-function loadSelectedDefaults() {
-  if (selectedDefaults.size === 0) { showToast('Select at least one bar first'); return; }
-  send({ type: 'load_defaults', selected: [...selectedDefaults] });
+function useFindBarsSelection() {
+  if (selectedResultIds.size === 0) { showToast('Select at least one bar first'); return; }
+  const names = searchResults.filter(p => selectedResultIds.has(p.placeId)).map(p => p.name);
+  send({ type: 'load_defaults', selected: names });
 }
 
 function setListMode(mode) {
   listMode = mode;
-  document.getElementById('tabDefault').className = 'mode-tab' + (mode === 'default' ? ' active' : '');
+  document.getElementById('tabFindBars').className = 'mode-tab' + (mode === 'findbars' ? ' active' : '');
   document.getElementById('tabCustom').className = 'mode-tab' + (mode === 'custom' ? ' active' : '');
-  document.getElementById('defaultModePanel').style.display = mode === 'default' ? '' : 'none';
+  document.getElementById('findBarsPanel').style.display = mode === 'findbars' ? '' : 'none';
   document.getElementById('customModePanel').style.display = mode === 'custom' ? '' : 'none';
   // If switching to custom, clear server bars so it's a fresh list
   if (mode === 'custom' && roomState && roomState.bars.length > 0) {
     if (confirm('Switch to a custom list? This will clear the current bar list.')) {
       send({ type: 'clear_bars' });
     } else {
-      setListMode('default'); // revert
+      setListMode('findbars'); // revert
     }
   }
 }
@@ -904,9 +990,9 @@ function renderWaiting() {
     document.getElementById('hostBarControls').style.display = '';
     document.getElementById('guestBarView').style.display = 'none';
 
-    // Default mode: show confirmed bars below the chip picker
+    // Find Bars mode: show confirmed bars below the chip picker
     const defaultBarList = document.getElementById('waitingBarList');
-    if (listMode === 'default') {
+    if (listMode === 'findbars') {
       defaultBarList.innerHTML = '';
       bars.forEach(bar => {
         const div = document.createElement('div');
@@ -1256,7 +1342,7 @@ function launchConfetti() {
 
 // ── Auto-join from URL ────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
-  initDefaultChips();
+  initFindBarsFilters();
   const params = new URLSearchParams(location.search);
   const r = params.get('room');
   if (r) {
@@ -1288,6 +1374,7 @@ document.addEventListener('keydown', e => {
   if (active.id === 'createUsername') createRoom();
   else if (active.id === 'joinCode' || active.id === 'joinUsername') joinRoom();
   else if (active.id === 'waitingBarInput') addBar();
+  else if (active.id === 'findBarsLocationInput') searchBars();
 });
 </script>
 </body>

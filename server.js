@@ -8,7 +8,115 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
+app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+// ── FIND BARS (Google Places API) ────────────────────────────────────────
+const PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY;
+const SEARCH_RADIUS_METERS = 8000; // ~5 miles
+const FIND_BARS_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const findBarsCache = new Map(); // cacheKey -> { expires, data }
+
+function findBarsCacheKey(location, filters) {
+  const normalizedFilters = [...filters].map(f => f.toLowerCase().trim()).sort().join(',');
+  return `${location.toLowerCase().trim()}|${normalizedFilters}`;
+}
+
+async function geocodeLocation(location) {
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(location)}&key=${PLACES_API_KEY}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Geocoding request failed (${res.status})`);
+  const data = await res.json();
+  if (data.status === 'ZERO_RESULTS') return null;
+  if (data.status !== 'OK' || !data.results || !data.results.length) {
+    throw new Error(`Geocoding API error: ${data.status}${data.error_message ? ' - ' + data.error_message : ''}`);
+  }
+  const { lat, lng } = data.results[0].geometry.location;
+  return { lat, lng };
+}
+
+async function searchPlacesText(query, center) {
+  const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': PLACES_API_KEY,
+      'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.rating',
+    },
+    body: JSON.stringify({
+      textQuery: query,
+      locationBias: {
+        circle: {
+          center: { latitude: center.lat, longitude: center.lng },
+          radius: SEARCH_RADIUS_METERS,
+        },
+      },
+      maxResultCount: 20,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Places API error (${res.status})`);
+  }
+  const data = await res.json();
+  return Array.isArray(data.places) ? data.places : [];
+}
+
+app.post('/api/find-bars', async (req, res) => {
+  try {
+    if (!PLACES_API_KEY) {
+      return res.status(500).json({ error: 'Server is not configured with a Google Places API key.' });
+    }
+
+    const location = String(req.body?.location || '').trim().slice(0, 100);
+    const filters = Array.isArray(req.body?.filters)
+      ? req.body.filters.map(f => String(f).trim().slice(0, 40)).filter(Boolean).slice(0, 8)
+      : [];
+
+    if (!location) {
+      return res.status(400).json({ error: 'Please enter a city name or zip code.' });
+    }
+
+    const cacheKey = findBarsCacheKey(location, filters);
+    const cached = findBarsCache.get(cacheKey);
+    if (cached && cached.expires > Date.now()) {
+      return res.json(cached.data);
+    }
+
+    const center = await geocodeLocation(location);
+    if (!center) {
+      return res.status(404).json({ error: `Could not find "${location}". Try a different city or zip code.` });
+    }
+
+    const queries = filters.length > 0
+      ? filters.map(f => `${f} near ${location}`)
+      : [`bar near ${location}`];
+
+    const resultsByPlaceId = new Map();
+    for (const query of queries) {
+      const places = await searchPlacesText(query, center);
+      for (const place of places) {
+        if (!place.id || resultsByPlaceId.has(place.id)) continue;
+        resultsByPlaceId.set(place.id, {
+          name: place.displayName?.text || 'Unknown',
+          address: place.formattedAddress || '',
+          rating: typeof place.rating === 'number' ? place.rating : 0,
+          placeId: place.id,
+        });
+      }
+    }
+
+    const results = [...resultsByPlaceId.values()]
+      .sort((a, b) => b.rating - a.rating)
+      .slice(0, 30);
+
+    findBarsCache.set(cacheKey, { expires: Date.now() + FIND_BARS_CACHE_TTL_MS, data: results });
+
+    res.json(results);
+  } catch (err) {
+    console.error('find-bars error:', err);
+    res.status(502).json({ error: 'Something went wrong searching for bars. Please try again.' });
+  }
+});
 
 const DEFAULT_BARS = [
   'Bulldog (Uptown)', 'BBG', 'Yacht Club', 'The Tchoup Yard', "Bruno's",
