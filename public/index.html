@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Bar Picker</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
 <style>
@@ -32,6 +32,10 @@
     font-family: 'DM Sans', sans-serif;
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
   body::after {
     content: '';
@@ -50,6 +54,7 @@
     flex-direction: column;
     align-items: center; justify-content: center;
     padding: 32px 20px;
+    padding-top: calc(32px + env(safe-area-inset-top));
     position: relative;
   }
   #entryScreen.active { display: flex; }
@@ -128,6 +133,7 @@
   }
   .waiting-header {
     text-align: center; padding: 36px 0 28px;
+    padding-top: calc(36px + env(safe-area-inset-top));
   }
   .waiting-logo {
     font-family: 'Bebas Neue', sans-serif; font-size: 32px; letter-spacing: 3px;
@@ -276,6 +282,8 @@
   .topbar {
     display: flex; align-items: center; justify-content: space-between;
     padding: 16px 0 14px; border-bottom: 1px solid var(--border); margin-bottom: 18px;
+    padding-top: calc(16px + env(safe-area-inset-top));
+    background: red; /* TEMP DEBUG: remove after confirming safe-area boundary on device */
   }
   .topbar-logo {
     font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 2px;
@@ -442,7 +450,7 @@
 
   /* conn badge */
   .conn-badge {
-    position: fixed; top: 13px; right: 13px;
+    position: fixed; top: calc(13px + env(safe-area-inset-top)); right: calc(13px + env(safe-area-inset-right));
     font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
     padding: 4px 10px; border-radius: 20px; z-index: 100;
     transition: all 0.3s; pointer-events: none;
@@ -453,7 +461,7 @@
 
   /* toast */
   .toast {
-    position: fixed; bottom: 24px; left: 50%;
+    position: fixed; bottom: calc(24px + env(safe-area-inset-bottom)); left: 50%;
     transform: translateX(-50%) translateY(70px);
     background: var(--surface2); border: 1px solid var(--gold-dim);
     color: var(--text); padding: 10px 20px; border-radius: 30px;
@@ -503,6 +511,7 @@
 
   .menu-panel {
     position: fixed; top: 0; left: 0; bottom: 0; width: 220px;
+    padding-left: env(safe-area-inset-left);
     background: var(--surface); border-right: 1px solid var(--border2);
     z-index: 9996; display: flex; flex-direction: column;
     transform: translateX(-100%);
@@ -510,7 +519,7 @@
   }
   .menu-panel.open { transform: translateX(0); }
   .menu-panel-header {
-    padding: 24px 20px 16px; border-bottom: 1px solid var(--border2);
+    padding: calc(24px + env(safe-area-inset-top)) 20px 16px; border-bottom: 1px solid var(--border2);
     font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 2px;
     background: linear-gradient(135deg, var(--amber), var(--gold));
     -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
