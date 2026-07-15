@@ -41,7 +41,7 @@ async function searchPlacesText(query, center) {
     headers: {
       'Content-Type': 'application/json',
       'X-Goog-Api-Key': PLACES_API_KEY,
-      'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.rating',
+      'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount',
     },
     body: JSON.stringify({
       textQuery: query,
@@ -100,14 +100,16 @@ app.post('/api/find-bars', async (req, res) => {
           name: place.displayName?.text || 'Unknown',
           address: place.formattedAddress || '',
           rating: typeof place.rating === 'number' ? place.rating : 0,
+          reviewCount: typeof place.userRatingCount === 'number' ? place.userRatingCount : 0,
           placeId: place.id,
         });
       }
     }
 
     const results = [...resultsByPlaceId.values()]
-      .sort((a, b) => b.rating - a.rating)
-      .slice(0, 30);
+      .sort((a, b) => b.reviewCount - a.reviewCount)
+      .slice(0, 30)
+      .map(({ reviewCount, ...place }) => place);
 
     findBarsCache.set(cacheKey, { expires: Date.now() + FIND_BARS_CACHE_TTL_MS, data: results });
 

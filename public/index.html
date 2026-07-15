@@ -252,6 +252,14 @@
     background: rgba(232,164,53,0.1); border-color: var(--gold-dim); color: var(--amber);
   }
   .default-chip.selected::before { content: '✓ '; font-size: 11px; color: var(--gold); }
+  .chip-label { pointer-events: none; }
+  .chip-remove-btn {
+    background: none; border: none; color: var(--text-muted);
+    font-size: 10px; line-height: 1; padding: 1px; margin-left: 1px;
+    opacity: 0.55; cursor: pointer; transition: all 0.15s;
+    display: inline-flex; align-items: center;
+  }
+  .chip-remove-btn:hover { color: var(--red); opacity: 1; }
 
   .chip-actions {
     display: flex; gap: 8px; margin-bottom: 14px;
@@ -633,6 +641,10 @@
 
         <div id="findBarsResultsPanel" style="display:none">
           <div class="default-bars-grid" id="defaultChipsGrid"></div>
+          <div class="add-form" style="margin-bottom:10px">
+            <input class="add-input" id="findBarsManualInput" type="text" maxlength="60" placeholder="Add a bar manually..." autocomplete="off" />
+            <button class="add-btn" onclick="addManualFindBar()">ADD</button>
+          </div>
           <div class="selected-count" id="selectedCount">0 bars selected</div>
           <div class="chip-actions">
             <button class="chip-action-btn" onclick="selectAllFindBars()">Select All</button>
@@ -842,20 +854,63 @@ function renderFindBarsResults() {
   const grid = document.getElementById('defaultChipsGrid');
   grid.innerHTML = '';
   searchResults.forEach(place => {
-    const chip = document.createElement('button');
-    chip.type = 'button';
+    const chip = document.createElement('div');
     chip.className = 'default-chip' + (selectedResultIds.has(place.placeId) ? ' selected' : '');
-    chip.textContent = place.name + (place.rating ? ` ★${place.rating.toFixed(1)}` : '');
+    chip.setAttribute('role', 'button');
+    chip.setAttribute('tabindex', '0');
     chip.title = place.address || '';
-    chip.onclick = () => {
+
+    const label = document.createElement('span');
+    label.className = 'chip-label';
+    label.textContent = place.name + (place.rating ? ` ★${place.rating.toFixed(1)}` : '');
+    chip.appendChild(label);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'chip-remove-btn';
+    removeBtn.title = 'Remove from list';
+    removeBtn.textContent = '✕';
+    removeBtn.onclick = (e) => {
+      e.stopPropagation();
+      removeFindBarResult(place.placeId);
+    };
+    chip.appendChild(removeBtn);
+
+    const toggle = () => {
       if (selectedResultIds.has(place.placeId)) selectedResultIds.delete(place.placeId);
       else selectedResultIds.add(place.placeId);
       chip.className = 'default-chip' + (selectedResultIds.has(place.placeId) ? ' selected' : '');
       updateFindBarsSelectedCount();
     };
+    chip.onclick = toggle;
+    chip.onkeydown = (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+    };
+
     grid.appendChild(chip);
   });
   updateFindBarsSelectedCount();
+}
+
+function removeFindBarResult(placeId) {
+  searchResults = searchResults.filter(p => p.placeId !== placeId);
+  selectedResultIds.delete(placeId);
+  renderFindBarsResults();
+}
+
+function addManualFindBar() {
+  const input = document.getElementById('findBarsManualInput');
+  const name = input.value.trim().slice(0, 60);
+  if (!name) { input.focus(); return; }
+  if (searchResults.find(p => p.name.toLowerCase() === name.toLowerCase())) {
+    showToast('Already in the list!'); input.select(); return;
+  }
+  const placeId = 'manual_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  searchResults.push({ name, address: '', rating: 0, placeId });
+  selectedResultIds.add(placeId);
+  renderFindBarsResults();
+  input.value = '';
+  input.focus();
 }
 
 function updateFindBarsSelectedCount() {
@@ -1375,6 +1430,7 @@ document.addEventListener('keydown', e => {
   else if (active.id === 'joinCode' || active.id === 'joinUsername') joinRoom();
   else if (active.id === 'waitingBarInput') addBar();
   else if (active.id === 'findBarsLocationInput') searchBars();
+  else if (active.id === 'findBarsManualInput') addManualFindBar();
 });
 </script>
 </body>
