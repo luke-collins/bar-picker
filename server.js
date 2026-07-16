@@ -1,6 +1,7 @@
 const express = require('express');
 const { WebSocketServer } = require('ws');
 const http = require('http');
+const http2 = require('http2');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -127,6 +128,122 @@ const DEFAULT_BARS = [
   "Lucy's", 'Hog Alley', 'Finn McCools', 'Parlays', 'Cooter Browns',
   'The Basin', "Manning's", 'Abita', 'MRB'
 ];
+
+// ── PUSH NOTIFICATIONS (APNs) ─────────────────────────────────────────────
+// Local notifications triggered by client-side JS can't reliably fire once a
+// backgrounded WKWebView is suspended by iOS (no background mode entitlement
+// here), so turn alerts are sent as real push notifications instead: the
+// server decides when a turn changes and pushes directly to Apple's servers,
+// which deliver independent of whether the app's own process is running.
+//
+// Required env vars (all-or-nothing -- push sending is silently disabled,
+// not an error, if any are missing):
+//   APNS_KEY_ID        Key ID of the APNs Auth Key created in the Apple
+//                       Developer portal (Certificates, IDs & Profiles > Keys)
+//   APNS_TEAM_ID        Apple Developer Team ID
+//   APNS_BUNDLE_ID      App's bundle identifier (capacitor.config.json's appId)
+//   APNS_KEY_BASE64     The .p8 key file's contents, base64-encoded (avoids
+//                       newline-escaping issues from pasting raw PEM into an
+//                       env var) -- e.g. `base64 -i AuthKey_XXXX.p8`
+//   APNS_PRODUCTION     Optional, "true" to use Apple's production APNs host
+//                       instead of the sandbox host used by Xcode debug
+//                       builds. Defaults to sandbox.
+const APNS_KEY_ID = process.env.APNS_KEY_ID || null;
+const APNS_TEAM_ID = process.env.APNS_TEAM_ID || null;
+const APNS_BUNDLE_ID = process.env.APNS_BUNDLE_ID || null;
+const APNS_PRIVATE_KEY = process.env.APNS_KEY_BASE64
+  ? Buffer.from(process.env.APNS_KEY_BASE64, 'base64').toString('utf8')
+  : null;
+const APNS_HOST = process.env.APNS_PRODUCTION === 'true'
+  ? 'api.push.apple.com'
+  : 'api.sandbox.push.apple.com';
+const APNS_ENABLED = !!(APNS_KEY_ID && APNS_TEAM_ID && APNS_BUNDLE_ID && APNS_PRIVATE_KEY);
+
+if (!APNS_ENABLED) {
+  console.log('[apns] not configured (missing APNS_KEY_ID/APNS_TEAM_ID/APNS_BUNDLE_ID/APNS_KEY_BASE64) -- turn push notifications disabled');
+}
+
+function base64url(input) {
+  return Buffer.from(input).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+// Apple's Provider Authentication Token (JWT, ES256) is valid up to 1 hour
+// and Apple rate-limits how often you may generate a new one -- cache and
+// reuse it rather than signing a fresh token per push.
+let cachedApnsJwt = null;
+let cachedApnsJwtIssuedAt = 0;
+const APNS_JWT_MAX_AGE_MS = 55 * 60 * 1000;
+
+function getApnsJwt() {
+  const now = Date.now();
+  if (cachedApnsJwt && now - cachedApnsJwtIssuedAt < APNS_JWT_MAX_AGE_MS) {
+    return cachedApnsJwt;
+  }
+  const header = base64url(JSON.stringify({ alg: 'ES256', kid: APNS_KEY_ID }));
+  const claims = base64url(JSON.stringify({ iss: APNS_TEAM_ID, iat: Math.floor(now / 1000) }));
+  const signingInput = `${header}.${claims}`;
+  // ES256 JWT signatures need the raw (r || s) "JOSE" format, not the DER
+  // encoding crypto.sign() produces by default for EC keys -- dsaEncoding
+  // asks Node to produce JOSE directly instead of hand-parsing ASN.1 DER.
+  const signature = crypto.sign('sha256', Buffer.from(signingInput), {
+    key: APNS_PRIVATE_KEY,
+    dsaEncoding: 'ieee-p1363',
+  });
+  cachedApnsJwt = `${signingInput}.${base64url(signature)}`;
+  cachedApnsJwtIssuedAt = now;
+  return cachedApnsJwt;
+}
+
+function sendApnsPush(deviceToken, { title, body }) {
+  if (!APNS_ENABLED) return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    const client = http2.connect(`https://${APNS_HOST}`);
+    client.on('error', reject);
+
+    const req = client.request({
+      ':method': 'POST',
+      ':path': `/3/device/${deviceToken}`,
+      'authorization': `bearer ${getApnsJwt()}`,
+      'apns-topic': APNS_BUNDLE_ID,
+      'apns-push-type': 'alert',
+      'apns-priority': '10',
+      'apns-expiration': String(Math.floor(Date.now() / 1000) + 3600),
+      'content-type': 'application/json',
+    });
+
+    let statusCode = null;
+    let responseBody = '';
+    req.on('response', (headers) => { statusCode = headers[':status']; });
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => { responseBody += chunk; });
+    req.on('end', () => {
+      client.close();
+      if (statusCode === 200) resolve();
+      else reject(new Error(`APNs error ${statusCode}: ${responseBody}`));
+    });
+    req.on('error', (err) => { client.close(); reject(err); });
+
+    req.end(JSON.stringify({
+      aps: { alert: { title, body }, sound: 'default' },
+    }));
+  });
+}
+
+// Pushes a "your turn" alert to whoever the current turn belongs to, if
+// they've registered a device token. Fire-and-forget: push delivery must
+// never block or fail game logic.
+function notifyCurrentTurnPlayer(room) {
+  if (!APNS_ENABLED || room.state !== 'playing') return;
+  const playerId = currentTurnPlayerId(room);
+  const player = room.players.find(p => p.id === playerId);
+  if (!player || !player.pushToken) return;
+
+  sendApnsPush(player.pushToken, {
+    title: 'Your turn!',
+    body: "It's your turn to eliminate a bar!",
+  }).catch(err => console.log('[apns] push failed', err.message));
+}
 
 /*
   Room states:
@@ -278,6 +395,14 @@ wss.on('connection', (ws) => {
 
     if (!currentRoom || !myPlayerId) return;
 
+    // ── REGISTER PUSH TOKEN ──────────────────────────────────────────────
+    if (msg.type === 'register_push_token') {
+      const token = (msg.token || '').trim();
+      if (!token) return;
+      const player = currentRoom.players.find(p => p.id === myPlayerId);
+      if (player) player.pushToken = token;
+    }
+
     // ── START GAME ────────────────────────────────────────────────────────
     if (msg.type === 'start_game') {
       if (myPlayerId !== currentRoom.host) return;
@@ -291,6 +416,7 @@ wss.on('connection', (ws) => {
       currentRoom.state = 'playing';
       currentRoom.turnIndex = 0;
       broadcastAll(currentRoom, roomSummary(currentRoom));
+      notifyCurrentTurnPlayer(currentRoom);
     }
 
     // ── LOAD DEFAULTS ─────────────────────────────────────────────────────
@@ -350,6 +476,7 @@ wss.on('connection', (ws) => {
       }
 
       broadcastAll(currentRoom, roomSummary(currentRoom));
+      notifyCurrentTurnPlayer(currentRoom); // no-op if the game just ended (state !== 'playing')
     }
 
     // ── DELETE BAR (lobby only) ───────────────────────────────────────────
@@ -413,6 +540,7 @@ wss.on('connection', (ws) => {
           if (!p || p.connected) return; // reconnected in the meantime
           removePlayer(room, playerId);
           broadcastAll(room, roomSummary(room));
+          notifyCurrentTurnPlayer(room); // in case removal auto-advanced the turn
         }, DISCONNECT_GRACE_MS);
         room.disconnectTimers.set(playerId, timer);
       }

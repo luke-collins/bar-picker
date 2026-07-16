@@ -769,8 +769,7 @@
 -->
 <script src="vendor/capacitor-core.js"></script>
 <script src="vendor/capacitor-share.js"></script>
-<script src="vendor/capacitor-app.js"></script>
-<script src="vendor/capacitor-local-notifications.js"></script>
+<script src="vendor/capacitor-push-notifications.js"></script>
 <script>
 // ── State ─────────────────────────────────────────────────────────
 let myPlayerId = null;
@@ -1019,10 +1018,9 @@ function handleMessage(msg) {
   if (msg.type === 'you') {
     myPlayerId = msg.playerId;
     isHost = msg.isHost;
+    sendPushTokenIfReady();
   } else if (msg.type === 'room_state') {
-    const prevRoomState = roomState;
     roomState = msg;
-    maybeNotifyMyTurn(prevRoomState, roomState);
     applyRoomState();
   } else if (msg.type === 'add') {
     if (roomState) {
@@ -1422,69 +1420,59 @@ async function shareInvite() {
   copyLink();
 }
 
-// ── Turn notifications ───────────────────────────────────────────
-// Native-only: alerts a player when it becomes their turn while the app is
-// backgrounded. vendor/capacitor-app.js + vendor/capacitor-local-notifications.js
-// (loaded above) populate Capacitor.Plugins.App / .LocalNotifications.
-const NOTIF_PERMISSION_ASKED_KEY = 'barpicker_notif_permission_asked';
-let appIsActive = true; // assume foreground; only native App events flip this
+// ── Turn notifications (native push) ─────────────────────────────
+// Native-only: alerts a player when it becomes their turn, even if the app
+// is fully backgrounded or closed. This is server-triggered real push (APNs)
+// rather than a client-side local notification, because a backgrounded
+// WKWebView's JS gets suspended by iOS within seconds without a background
+// mode entitlement -- there's no reliable way for client-side JS reacting to
+// a WebSocket message to fire something once truly suspended. The server
+// (server.js) decides when to send a push on every turn change; this file's
+// job is just registering for push and reporting the device token.
+// vendor/capacitor-push-notifications.js (loaded above) populates
+// Capacitor.Plugins.PushNotifications.
+const PUSH_PERMISSION_ASKED_KEY = 'barpicker_push_permission_asked';
+let pushToken = null;
 
-async function requestNotificationPermissionOnce() {
+async function initPushNotifications() {
   const cap = window.Capacitor;
   if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return; // web/browser: skip entirely
-  if (!cap.Plugins || !cap.Plugins.LocalNotifications) return;
-  if (localStorage.getItem(NOTIF_PERMISSION_ASKED_KEY)) return; // already asked once, granted or denied
+  if (!cap.Plugins || !cap.Plugins.PushNotifications) return;
+  const push = cap.Plugins.PushNotifications;
+
+  push.addListener('registration', (token) => {
+    pushToken = token.value;
+    sendPushTokenIfReady();
+  });
+  push.addListener('registrationError', (err) => {
+    console.log('[push] registration error', err);
+  });
 
   try {
-    await cap.Plugins.LocalNotifications.requestPermissions();
+    let granted;
+    if (localStorage.getItem(PUSH_PERMISSION_ASKED_KEY)) {
+      // Already asked before (this launch or a prior one) -- check current
+      // status instead of re-prompting.
+      granted = (await push.checkPermissions()).receive === 'granted';
+    } else {
+      granted = (await push.requestPermissions()).receive === 'granted';
+      localStorage.setItem(PUSH_PERMISSION_ASKED_KEY, '1');
+    }
+    if (!granted) return;
+    await push.register();
   } catch (err) {
-    console.log('[notifications] permission request failed', err);
-  } finally {
-    localStorage.setItem(NOTIF_PERMISSION_ASKED_KEY, '1');
+    console.log('[push] setup failed', err);
   }
 }
 
-function initAppStateTracking() {
-  const cap = window.Capacitor;
-  if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return; // web/browser: skip entirely
-  if (!cap.Plugins || !cap.Plugins.App) return;
-
-  cap.Plugins.App.addListener('appStateChange', ({ isActive }) => {
-    appIsActive = isActive;
-  });
-}
-
-// Mirrors the server's currentTurnPlayerId() (server.js) exactly — strict
-// modulo, no disconnected-player skipping — since we only want to notify
-// when it's a turn the player could actually act on right now.
-function currentTurnPlayerId(state) {
-  if (!state || state.state !== 'playing') return null;
-  const len = state.players.length;
-  if (len === 0) return null;
-  return state.players[state.turnIndex % len].id;
-}
-
-// Called from handleMessage() with the room_state before and after applying
-// an incoming update, so we can detect an actual turn CHANGE (not just a
-// re-broadcast of the same turn) landing on me while backgrounded.
-function maybeNotifyMyTurn(prevState, newState) {
-  const cap = window.Capacitor;
-  if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return; // web/browser: skip entirely
-  if (!cap.Plugins || !cap.Plugins.LocalNotifications) return;
-  if (appIsActive) return; // only notify while backgrounded
-
-  const prevTurnId = currentTurnPlayerId(prevState);
-  const newTurnId = currentTurnPlayerId(newState);
-  if (newTurnId !== myPlayerId) return; // not (now) my turn
-  if (prevTurnId === newTurnId) return; // no actual change -- don't re-fire
-
-  cap.Plugins.LocalNotifications.schedule({
-    notifications: [{
-      id: Math.floor(Math.random() * 2147483647),
-      title: 'Your turn!',
-      body: "It's your turn to eliminate a bar!",
-    }],
-  }).catch(err => console.log('[notifications] schedule failed', err));
+// Called once we might have both a token and a joined room (from the
+// 'registration' listener above, and from handleMessage()'s 'you' branch) --
+// whichever arrives second actually sends it, so registration order doesn't
+// matter.
+function sendPushTokenIfReady() {
+  if (pushToken && myPlayerId) {
+    send({ type: 'register_push_token', token: pushToken });
+  }
 }
 
 function toggleMenu() {
@@ -1556,8 +1544,7 @@ function launchConfetti() {
 window.addEventListener('DOMContentLoaded', () => {
   pinSafeAreaBottom();
   initFindBarsFilters();
-  initAppStateTracking();
-  requestNotificationPermissionOnce();
+  initPushNotifications();
   const params = new URLSearchParams(location.search);
   const r = params.get('room');
   if (r) {
