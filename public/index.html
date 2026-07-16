@@ -23,6 +23,7 @@
     --text-muted: #6b5c42;
     --border: #261e12;
     --border2: #332818;
+    --safe-bottom: env(safe-area-inset-bottom);
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   html { scroll-behavior: smooth; }
@@ -34,7 +35,7 @@
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
     padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
+    padding-bottom: var(--safe-bottom);
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
   }
@@ -280,7 +281,7 @@
 
   /* ── GAME SCREEN ── */
   #gameScreen {
-    max-width: 500px; margin: 0 auto; padding: 0 16px calc(80px + env(safe-area-inset-bottom));
+    max-width: 500px; margin: 0 auto; padding: 0 16px calc(80px + var(--safe-bottom));
   }
 
   /* topbar */
@@ -1029,10 +1030,10 @@ function applyRoomState() {
 
 function showScreen(id) {
   const target = document.getElementById(id);
-  const isSwitch = !target.classList.contains('active');
+  if (target.classList.contains('active')) return; // already showing — no DOM churn/reflow
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   target.classList.add('active');
-  if (isSwitch) window.scrollTo(0, 0);
+  window.scrollTo(0, 0);
 }
 
 // ── WAITING ROOM render ───────────────────────────────────────────
@@ -1133,8 +1134,27 @@ function renderWaiting() {
   }
 }
 
+// ── Safe-area pin ─────────────────────────────────────────────────
+// WKWebView can transiently mis-resolve env(safe-area-inset-bottom) after a
+// reflow (e.g. a reconnect re-render), which would silently shrink bottom
+// padding a moment after it was first correct. Ratchet the observed value
+// up-only into a custom property so later renders can't regress it.
+let pinnedSafeBottom = 0;
+function pinSafeAreaBottom() {
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;bottom:0;height:env(safe-area-inset-bottom);width:0;visibility:hidden;pointer-events:none;';
+  document.body.appendChild(probe);
+  const val = parseFloat(getComputedStyle(probe).height) || 0;
+  probe.remove();
+  if (val > pinnedSafeBottom) {
+    pinnedSafeBottom = val;
+    document.documentElement.style.setProperty('--safe-bottom', pinnedSafeBottom + 'px');
+  }
+}
+
 // ── GAME render ───────────────────────────────────────────────────
 function renderGame() {
+  pinSafeAreaBottom();
   const s = roomState;
   const bars = s.bars;
   const players = s.players;
@@ -1416,6 +1436,7 @@ function launchConfetti() {
 
 // ── Auto-join from URL ────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
+  pinSafeAreaBottom();
   initFindBarsFilters();
   const params = new URLSearchParams(location.search);
   const r = params.get('room');
