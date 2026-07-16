@@ -43,3 +43,55 @@ index 638de78..9cddf6c 100644
                      if !hasCancellableButton {
                          self?.setupCancelationListeners(alertController, call)
                      }
+diff --git a/node_modules/@capacitor/action-sheet/ios/Sources/ActionSheetPlugin/UrlCheckerPlugin.swift b/node_modules/@capacitor/action-sheet/ios/Sources/ActionSheetPlugin/UrlCheckerPlugin.swift
+new file mode 100644
+index 0000000..a990904
+--- /dev/null
++++ b/node_modules/@capacitor/action-sheet/ios/Sources/ActionSheetPlugin/UrlCheckerPlugin.swift
+@@ -0,0 +1,46 @@
++import Foundation
++import Capacitor
++import UIKit
++
++// Minimal custom plugin exposing UIApplication.canOpenURL to JS, since none
++// of our installed Capacitor plugins provide this and iOS requires a native
++// check (canOpenURL is blocked for schemes not declared in
++// LSApplicationQueriesSchemes -- see Info.plist). Only uses CAPPluginCall
++// APIs confirmed never gated by capacitor-swift-pm's upstream
++// "$NonescapableTypes" packaging bug (see the patches/ directory for the
++// full explanation), so this custom plugin needs no interface workaround
++// of its own.
++//
++// This file lives inside the @capacitor/action-sheet package (rather than
++// the App target) so that `cap sync`'s plugin scanner -- which only scans
++// each *installed npm plugin's* own ios source directory for an
++// objc-exposed plugin class name to populate the generated
++// capacitor.config.json's packageClassList -- picks it up automatically.
++// A plugin class placed directly in the App target compiles and links
++// fine but is never actually registered with the JS bridge, since
++// packageClassList is the only thing CapacitorBridge.registerPlugins()
++// consults, and it's fully regenerated (not merged) on every `cap sync`.
++// Registering it via CAPBridgeViewController.bridge?.registerPluginInstance()
++// from a custom view controller subclass was the other option, but
++// `bridge` on CAPBridgeViewController is itself gated by the same
++// $NonescapableTypes bug and (unlike some other gated APIs used elsewhere
++// in this project) isn't @objc-exposed, so there's no KVC fallback for it.
++@objc(UrlCheckerPlugin)
++public class UrlCheckerPlugin: CAPPlugin, CAPBridgedPlugin {
++    public let identifier = "UrlCheckerPlugin"
++    public let jsName = "UrlChecker"
++    public let pluginMethods: [CAPPluginMethod] = [
++        CAPPluginMethod(name: "canOpenUrl", returnType: CAPPluginReturnPromise)
++    ]
++
++    @objc func canOpenUrl(_ call: CAPPluginCall) {
++        let urlString = call.getString("url", "")
++        guard !urlString.isEmpty, let url = URL(string: urlString) else {
++            call.resolve(["value": false])
++            return
++        }
++        DispatchQueue.main.async {
++            call.resolve(["value": UIApplication.shared.canOpenURL(url)])
++        }
++    }
++}
