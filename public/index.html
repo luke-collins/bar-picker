@@ -72,11 +72,7 @@
     background: linear-gradient(170deg, var(--amber) 0%, var(--gold) 45%, #a06018 100%);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
     filter: drop-shadow(0 0 28px rgba(232,164,53,0.22));
-    margin-bottom: 6px;
-  }
-  .tagline {
-    color: var(--text-muted); font-size: 11px; letter-spacing: 4px;
-    text-transform: uppercase; margin-bottom: 44px;
+    margin-bottom: 48px;
   }
   .entry-card {
     background: var(--surface); border: 1px solid var(--border2);
@@ -567,7 +563,6 @@
 <!-- ── ENTRY SCREEN ─────────────────────────────────────────────── -->
 <div id="entryScreen" class="screen active">
   <div class="logo">Bar Picker</div>
-  <div class="tagline">Eliminate. Decide. Go.</div>
 
   <div class="entry-card">
     <div id="createSection">
@@ -649,7 +644,6 @@
           <div class="chip-actions">
             <button class="chip-action-btn" onclick="selectAllFindBars()">Select All</button>
             <button class="chip-action-btn" onclick="selectNoneFindBars()">Clear</button>
-            <button class="chip-action-btn confirm" onclick="useFindBarsSelection()">Use These Bars →</button>
           </div>
         </div>
 
@@ -803,6 +797,19 @@ function initFindBarsFilters() {
   });
 }
 
+// Find Bars selection feeds room.bars directly (same additive model as Custom List) —
+// there is no separate "confirm" step, so every toggle/add/remove has to sync live.
+function addBarToRoom(name) {
+  if (roomState && roomState.bars.find(b => b.name.toLowerCase() === name.toLowerCase())) return;
+  send({ type: 'add', name });
+}
+
+function removeBarFromRoomByName(name) {
+  if (!roomState) return;
+  const bar = roomState.bars.find(b => b.name.toLowerCase() === name.toLowerCase());
+  if (bar) send({ type: 'delete', id: bar.id });
+}
+
 async function searchBars() {
   const input = document.getElementById('findBarsLocationInput');
   const location = input.value.trim();
@@ -831,6 +838,7 @@ async function searchBars() {
     selectedResultIds = new Set(searchResults.map(p => p.placeId));
     renderFindBarsResults();
     setFindBarsState('results');
+    searchResults.forEach(p => addBarToRoom(p.name));
   } catch (err) {
     setFindBarsState('error', 'Could not reach the server. Check your connection and try again.');
   } finally {
@@ -877,8 +885,13 @@ function renderFindBarsResults() {
     chip.appendChild(removeBtn);
 
     const toggle = () => {
-      if (selectedResultIds.has(place.placeId)) selectedResultIds.delete(place.placeId);
-      else selectedResultIds.add(place.placeId);
+      if (selectedResultIds.has(place.placeId)) {
+        selectedResultIds.delete(place.placeId);
+        removeBarFromRoomByName(place.name);
+      } else {
+        selectedResultIds.add(place.placeId);
+        addBarToRoom(place.name);
+      }
       chip.className = 'default-chip' + (selectedResultIds.has(place.placeId) ? ' selected' : '');
       updateFindBarsSelectedCount();
     };
@@ -893,6 +906,10 @@ function renderFindBarsResults() {
 }
 
 function removeFindBarResult(placeId) {
+  const place = searchResults.find(p => p.placeId === placeId);
+  if (place && selectedResultIds.has(placeId)) {
+    removeBarFromRoomByName(place.name);
+  }
   searchResults = searchResults.filter(p => p.placeId !== placeId);
   selectedResultIds.delete(placeId);
   renderFindBarsResults();
@@ -908,6 +925,7 @@ function addManualFindBar() {
   const placeId = 'manual_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   searchResults.push({ name, address: '', rating: 0, placeId });
   selectedResultIds.add(placeId);
+  addBarToRoom(name);
   renderFindBarsResults();
   input.value = '';
   input.focus();
@@ -920,19 +938,21 @@ function updateFindBarsSelectedCount() {
 }
 
 function selectAllFindBars() {
-  selectedResultIds = new Set(searchResults.map(p => p.placeId));
+  searchResults.forEach(p => {
+    if (!selectedResultIds.has(p.placeId)) {
+      selectedResultIds.add(p.placeId);
+      addBarToRoom(p.name);
+    }
+  });
   renderFindBarsResults();
 }
 
 function selectNoneFindBars() {
+  searchResults.forEach(p => {
+    if (selectedResultIds.has(p.placeId)) removeBarFromRoomByName(p.name);
+  });
   selectedResultIds.clear();
   renderFindBarsResults();
-}
-
-function useFindBarsSelection() {
-  if (selectedResultIds.size === 0) { showToast('Select at least one bar first'); return; }
-  const names = searchResults.filter(p => selectedResultIds.has(p.placeId)).map(p => p.name);
-  send({ type: 'load_defaults', selected: names });
 }
 
 function setListMode(mode) {
@@ -1048,6 +1068,17 @@ function renderWaiting() {
     // Find Bars mode: show confirmed bars below the chip picker
     const defaultBarList = document.getElementById('waitingBarList');
     if (listMode === 'findbars') {
+      // Keep chip selection in sync with the room's actual bar list (e.g. if a bar
+      // was removed via the trash icon below instead of by toggling its chip)
+      const roomBarNames = new Set(bars.map(b => b.name.toLowerCase()));
+      let selectionChanged = false;
+      searchResults.forEach(p => {
+        const inRoom = roomBarNames.has(p.name.toLowerCase());
+        if (inRoom && !selectedResultIds.has(p.placeId)) { selectedResultIds.add(p.placeId); selectionChanged = true; }
+        if (!inRoom && selectedResultIds.has(p.placeId)) { selectedResultIds.delete(p.placeId); selectionChanged = true; }
+      });
+      if (selectionChanged) renderFindBarsResults();
+
       defaultBarList.innerHTML = '';
       bars.forEach(bar => {
         const div = document.createElement('div');
