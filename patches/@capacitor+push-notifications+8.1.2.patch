@@ -1,0 +1,146 @@
+diff --git a/node_modules/@capacitor/push-notifications/ios/Sources/PushNotificationsPlugin/PushNotificationsHandler.swift b/node_modules/@capacitor/push-notifications/ios/Sources/PushNotificationsPlugin/PushNotificationsHandler.swift
+index 653d4eb..617d2d8 100644
+--- a/node_modules/@capacitor/push-notifications/ios/Sources/PushNotificationsPlugin/PushNotificationsHandler.swift
++++ b/node_modules/@capacitor/push-notifications/ios/Sources/PushNotificationsPlugin/PushNotificationsHandler.swift
+@@ -29,30 +29,15 @@ public class PushNotificationsHandler: NSObject, NotificationHandlerProtocol {
+             }
+         }
+ 
+-        if let optionsArray = self.plugin?.getConfig().getArray("presentationOptions") as? [String] {
+-            var presentationOptions = UNNotificationPresentationOptions.init()
+-
+-            optionsArray.forEach { option in
+-                switch option {
+-                case "banner":
+-                    presentationOptions.insert(.banner)
+-                case "list":
+-                    presentationOptions.insert(.list)
+-                case "alert":
+-                    presentationOptions.insert(.banner)
+-                    presentationOptions.insert(.list)
+-                case "badge":
+-                    presentationOptions.insert(.badge)
+-                case "sound":
+-                    presentationOptions.insert(.sound)
+-                default:
+-                    print("Unrecogizned presentation option: \(option)")
+-                }
+-            }
+-
+-            return presentationOptions
+-        }
+-
++        // PluginConfig.getArray(_:_:) is pure-Swift (not @objc-exposed) and
++        // gated behind an experimental compiler flag not enabled in standard
++        // toolchains ("#if compiler(>=5.3) && $NonescapableTypes" -- same
++        // root cause as the other patches in this repo), with no ObjC
++        // runtime fallback available since it's never bridged. This app
++        // doesn't set a custom "presentationOptions" plugin config, so
++        // always use the documented default (suppress the system alert
++        // while foregrounded; notifyListeners above already delivered the
++        // notification to JS) rather than reading it.
+         return []
+     }
+ 
+@@ -80,6 +65,21 @@ public class PushNotificationsHandler: NSObject, NotificationHandlerProtocol {
+ 
+     }
+ 
++    // JSTypes.coerceDictionaryToJSObject is pure-Swift (not @objc-exposed)
++    // and gated the same way as PluginConfig.getArray above, with no ObjC
++    // runtime fallback available. Reimplemented for our own purposes:
++    // userInfo here only ever contains values APNs delivers as plain JSON,
++    // which are already JSValue-compatible.
++    private func coerceToJSObject(_ dictionary: [AnyHashable: Any]?) -> JSObject {
++        guard let dictionary = dictionary else { return [:] }
++        var result = JSObject()
++        for (key, value) in dictionary {
++            guard let stringKey = key as? String, let jsValue = value as? any JSValue else { continue }
++            result[stringKey] = jsValue
++        }
++        return result
++    }
++
+     func makeNotificationRequestJSObject(_ request: UNNotificationRequest) -> JSObject {
+         return [
+             "id": request.identifier,
+@@ -87,7 +87,7 @@ public class PushNotificationsHandler: NSObject, NotificationHandlerProtocol {
+             "subtitle": request.content.subtitle,
+             "badge": request.content.badge ?? 1,
+             "body": request.content.body,
+-            "data": JSTypes.coerceDictionaryToJSObject(request.content.userInfo) ?? [:]
++            "data": coerceToJSObject(request.content.userInfo)
+         ]
+     }
+ }
+diff --git a/node_modules/@capacitor/push-notifications/ios/Sources/PushNotificationsPlugin/PushNotificationsPlugin.swift b/node_modules/@capacitor/push-notifications/ios/Sources/PushNotificationsPlugin/PushNotificationsPlugin.swift
+index 9044c74..fe6667a 100644
+--- a/node_modules/@capacitor/push-notifications/ios/Sources/PushNotificationsPlugin/PushNotificationsPlugin.swift
++++ b/node_modules/@capacitor/push-notifications/ios/Sources/PushNotificationsPlugin/PushNotificationsPlugin.swift
+@@ -32,6 +32,18 @@ public class PushNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
+     private let notificationDelegateHandler = PushNotificationsHandler()
+     private var appDelegateRegistrationCalled: Bool = false
+ 
++    // capacitor-swift-pm 8.x's .swiftinterface incorrectly gates several
++    // CAPPluginCall APIs behind an experimental compiler flag not enabled in
++    // standard toolchains, even though they're genuinely present in the
++    // compiled binary (same root cause as the @capacitor/share and
++    // @capacitor/local-notifications patches). This reads the
++    // always-available JSArray-returning getArray(_:_:) overload and
++    // downcasts each element, instead of the gated generic
++    // getArray<T>(_:_:) overload.
++    private func getObjectArray(_ call: CAPPluginCall, _ key: String) -> [JSObject] {
++        call.getArray(key, []).compactMap { $0 as? JSObject }
++    }
++
+     override public func load() {
+         self.bridge?.notificationRouter.pushNotificationHandler = self.notificationDelegateHandler
+         self.notificationDelegateHandler.plugin = self
+@@ -78,11 +90,11 @@ public class PushNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
+         self.notificationDelegateHandler.requestPermissions { granted, error in
+             guard error == nil else {
+                 if let err = error {
+-                    call.reject(err.localizedDescription)
++                    call.unavailable(err.localizedDescription)
+                     return
+                 }
+ 
+-                call.reject("unknown error in permissions request")
++                call.unavailable("unknown error in permissions request")
+                 return
+             }
+ 
+@@ -123,7 +135,7 @@ public class PushNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
+      */
+     @objc func getDeliveredNotifications(_ call: CAPPluginCall) {
+         if !appDelegateRegistrationCalled {
+-            call.reject("event capacitorDidRegisterForRemoteNotifications not called.  Visit https://capacitorjs.com/docs/apis/push-notifications for more information")
++            call.unavailable("event capacitorDidRegisterForRemoteNotifications not called.  Visit https://capacitorjs.com/docs/apis/push-notifications for more information")
+             return
+         }
+         UNUserNotificationCenter.current().getDeliveredNotifications(completionHandler: { (notifications) in
+@@ -141,11 +153,12 @@ public class PushNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
+      */
+     @objc func removeDeliveredNotifications(_ call: CAPPluginCall) {
+         if !appDelegateRegistrationCalled {
+-            call.reject("event capacitorDidRegisterForRemoteNotifications not called.  Visit https://capacitorjs.com/docs/apis/push-notifications for more information")
++            call.unavailable("event capacitorDidRegisterForRemoteNotifications not called.  Visit https://capacitorjs.com/docs/apis/push-notifications for more information")
+             return
+         }
+-        guard let notifications = call.getArray("notifications", JSObject.self) else {
+-            call.reject("Must supply notifications to remove")
++        let notifications = getObjectArray(call, "notifications")
++        guard !notifications.isEmpty else {
++            call.unavailable("Must supply notifications to remove")
+             return
+         }
+ 
+@@ -159,7 +172,7 @@ public class PushNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
+      */
+     @objc func removeAllDeliveredNotifications(_ call: CAPPluginCall) {
+         if !appDelegateRegistrationCalled {
+-            call.reject("event capacitorDidRegisterForRemoteNotifications not called.  Visit https://capacitorjs.com/docs/apis/push-notifications for more information")
++            call.unavailable("event capacitorDidRegisterForRemoteNotifications not called.  Visit https://capacitorjs.com/docs/apis/push-notifications for more information")
+             return
+         }
+         UNUserNotificationCenter.current().removeAllDeliveredNotifications()
