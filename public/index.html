@@ -646,8 +646,6 @@
             <button class="chip-action-btn" onclick="selectNoneFindBars()">Clear</button>
           </div>
         </div>
-
-        <div class="bar-list" id="waitingBarList" style="margin-top:4px"></div>
       </div>
 
       <!-- CUSTOM mode: manual add -->
@@ -1065,11 +1063,8 @@ function renderWaiting() {
     document.getElementById('hostBarControls').style.display = '';
     document.getElementById('guestBarView').style.display = 'none';
 
-    // Find Bars mode: show confirmed bars below the chip picker
-    const defaultBarList = document.getElementById('waitingBarList');
+    // Find Bars mode: keep chip selection in sync with the room's actual bar list
     if (listMode === 'findbars') {
-      // Keep chip selection in sync with the room's actual bar list (e.g. if a bar
-      // was removed via the trash icon below instead of by toggling its chip)
       const roomBarNames = new Set(bars.map(b => b.name.toLowerCase()));
       let selectionChanged = false;
       searchResults.forEach(p => {
@@ -1078,17 +1073,6 @@ function renderWaiting() {
         if (!inRoom && selectedResultIds.has(p.placeId)) { selectedResultIds.delete(p.placeId); selectionChanged = true; }
       });
       if (selectionChanged) renderFindBarsResults();
-
-      defaultBarList.innerHTML = '';
-      bars.forEach(bar => {
-        const div = document.createElement('div');
-        div.className = 'waiting-bar-item';
-        div.innerHTML = `
-          <div class="waiting-bar-name">${esc(bar.name)}</div>
-          <button class="waiting-bar-del" onclick="send({type:'delete',id:'${bar.id}'})" title="Remove">🗑</button>
-        `;
-        defaultBarList.appendChild(div);
-      });
     }
 
     // Custom mode bar list
