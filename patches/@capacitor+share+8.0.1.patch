@@ -1,0 +1,88 @@
+diff --git a/node_modules/@capacitor/share/ios/Sources/SharePlugin/SharePlugin.swift b/node_modules/@capacitor/share/ios/Sources/SharePlugin/SharePlugin.swift
+index 73aa61b..b6bd518 100644
+--- a/node_modules/@capacitor/share/ios/Sources/SharePlugin/SharePlugin.swift
++++ b/node_modules/@capacitor/share/ios/Sources/SharePlugin/SharePlugin.swift
+@@ -16,20 +16,33 @@ public class SharePlugin: CAPPlugin, CAPBridgedPlugin {
+         ])
+     }
+ 
++    // capacitor-swift-pm 8.x's .swiftinterface incorrectly gates CAPBridgeProtocol's
++    // viewController property behind "#if compiler(>=5.3) && $NonescapableTypes", an
++    // experimental flag not enabled in standard toolchains -- so it's invisible to
++    // normal Swift code even though it's genuinely present in the compiled binary
++    // (confirmed via the framework's generated Objective-C header). KVC reads the
++    // real property directly, bypassing the broken Swift-side interface.
++    private var hostViewController: UIViewController? {
++        (bridge as? NSObject)?.value(forKey: "viewController") as? UIViewController
++    }
++
+     @objc func share(_ call: CAPPluginCall) {
+         var items = [Any]()
+ 
+-        if let text = call.getString("text") {
++        let text = call.getString("text", "")
++        if !text.isEmpty {
+             items.append(text)
+         }
+ 
+-        if let url = call.getString("url"), let urlObj = URL(string: url) {
++        let url = call.getString("url", "")
++        if !url.isEmpty, let urlObj = URL(string: url) {
+             items.append(urlObj)
+         }
+ 
+-        let title = call.getString("title")
++        let title = call.getString("title", "")
+ 
+-        if let files = call.getArray("files") {
++        let files = call.getArray("files", [])
++        if !files.isEmpty {
+             files.forEach { file in
+                 if let url = file as? String, let fileUrl = URL(string: url) {
+                     items.append(fileUrl)
+@@ -38,20 +51,20 @@ public class SharePlugin: CAPPlugin, CAPBridgedPlugin {
+         }
+ 
+         if items.count == 0 {
+-            call.reject("Must provide at least url, text or files")
++            call.unavailable("Must provide at least url, text or files")
+             return
+         }
+ 
+         DispatchQueue.main.async { [weak self] in
+             let actionController = UIActivityViewController(activityItems: items, applicationActivities: nil)
+ 
+-            if title != nil {
++            if !title.isEmpty {
+                 actionController.setValue(title, forKey: "subject")
+             }
+ 
+             actionController.completionWithItemsHandler = { (activityType, completed, _ returnedItems, activityError) in
+-                if activityError != nil {
+-                    call.reject("Error sharing item", nil, activityError)
++                if let activityError = activityError {
++                    call.unavailable("Error sharing item: \(activityError.localizedDescription)")
+                     return
+                 }
+ 
+@@ -60,16 +73,16 @@ public class SharePlugin: CAPPlugin, CAPBridgedPlugin {
+                         "activityType": activityType?.rawValue ?? ""
+                     ])
+                 } else {
+-                    call.reject("Share canceled")
++                    call.unavailable("Share canceled")
+                 }
+ 
+             }
+-            if self?.bridge?.viewController?.presentedViewController != nil {
+-                call.reject("Can't share while sharing is in progress")
++            if self?.hostViewController?.presentedViewController != nil {
++                call.unavailable("Can't share while sharing is in progress")
+                 return
+             }
+             self?.setCenteredPopover(actionController)
+-            self?.bridge?.viewController?.present(actionController, animated: true, completion: nil)
++            self?.hostViewController?.present(actionController, animated: true, completion: nil)
+         }
+     }
+ }

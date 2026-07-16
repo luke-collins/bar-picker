@@ -4,7 +4,8 @@
   "description": "Real-time bar elimination game for groups",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "postinstall": "patch-package"
   },
   "engines": {
     "node": ">=18"
@@ -17,6 +18,7 @@
   "devDependencies": {
     "@capacitor/cli": "^8.4.2",
     "@capacitor/core": "^8.4.2",
-    "@capacitor/ios": "^8.4.2"
+    "@capacitor/ios": "^8.4.2",
+    "patch-package": "^8.0.1"
   }
 }
