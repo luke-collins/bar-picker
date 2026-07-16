@@ -148,11 +148,13 @@
     font-size: 12px; color: var(--text-muted); margin-bottom: 4px;
   }
   .copy-link-btn {
-    background: none; border: none; color: var(--gold-dim); font-size: 12px;
-    cursor: pointer; text-decoration: underline; padding: 2px;
-    transition: color 0.15s;
+    display: inline-flex; align-items: center; gap: 5px;
+    background: var(--surface); border: 1px solid var(--border2);
+    color: var(--text-muted); font-size: 12px; font-weight: 500;
+    cursor: pointer; padding: 7px 14px; border-radius: 20px;
+    transition: all 0.15s;
   }
-  .copy-link-btn:hover { color: var(--gold); }
+  .copy-link-btn:hover { border-color: var(--gold-dim); color: var(--gold); background: var(--surface2); }
 
   .waiting-section { margin-bottom: 24px; }
   .section-label {
@@ -693,7 +695,7 @@
       <div class="topbar-logo">Bar Picker</div>
     </div>
     <div style="display:flex;align-items:center;gap:10px;">
-      <div class="room-pill" onclick="copyLink()" title="Copy invite link">
+      <div class="room-pill" onclick="shareInvite()" title="Share invite link">
         <div class="pill-dot"></div>
         <div class="pill-code" id="gamePillCode">—</div>
         <div class="pill-count" id="gamePillCount">—</div>
