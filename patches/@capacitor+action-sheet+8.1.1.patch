@@ -1,0 +1,45 @@
+diff --git a/node_modules/@capacitor/action-sheet/ios/Sources/ActionSheetPlugin/ActionSheetPlugin.swift b/node_modules/@capacitor/action-sheet/ios/Sources/ActionSheetPlugin/ActionSheetPlugin.swift
+index 638de78..9cddf6c 100644
+--- a/node_modules/@capacitor/action-sheet/ios/Sources/ActionSheetPlugin/ActionSheetPlugin.swift
++++ b/node_modules/@capacitor/action-sheet/ios/Sources/ActionSheetPlugin/ActionSheetPlugin.swift
+@@ -15,11 +15,30 @@ public class ActionSheetPlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresentat
+     private let implementation = ActionSheet()
+     private var currentCall: CAPPluginCall?
+ 
++    // capacitor-swift-pm 8.x's .swiftinterface incorrectly gates several
++    // CAPPluginCall/CAPBridgeProtocol APIs behind an experimental compiler
++    // flag not enabled in standard toolchains, even though they're genuinely
++    // present in the compiled binary (same root cause as the other patches
++    // in this repo). This reads the always-available JSArray-returning
++    // getArray(_:_:) overload and downcasts each element, instead of the
++    // gated generic getArray<T>(_:_:) overload.
++    private func getObjectArray(_ call: CAPPluginCall, _ key: String) -> [JSObject] {
++        call.getArray(key, []).compactMap { $0 as? JSObject }
++    }
++
++    // CAPBridgeProtocol.viewController is gated the same way but is
++    // @objc-exposed (confirmed via the framework's generated Objective-C
++    // header as a plain property), so KVC reads it directly, bypassing the
++    // broken Swift-side interface.
++    private var hostViewController: UIViewController? {
++        (bridge as? NSObject)?.value(forKey: "viewController") as? UIViewController
++    }
++
+     @objc func showActions(_ call: CAPPluginCall) {
+         let title = call.options["title"] as? String
+         let message = call.options["message"] as? String
+ 
+-        let options = call.getArray("options", JSObject.self) ?? []
++        let options = getObjectArray(call, "options")
+         var alertActions = [UIAlertAction]()
+         var hasCancellableButton = false
+         for (index, option) in options.enumerated() {
+@@ -45,7 +64,7 @@ public class ActionSheetPlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresentat
+         DispatchQueue.main.async { [weak self] in
+             if let alertController = self?.implementation.buildActionSheet(title: title, message: message, actions: alertActions) {
+                 self?.setCenteredPopover(alertController)
+-                self?.bridge?.viewController?.present(alertController, animated: true) {
++                self?.hostViewController?.present(alertController, animated: true) {
+                     if !hasCancellableButton {
+                         self?.setupCancelationListeners(alertController, call)
+                     }
