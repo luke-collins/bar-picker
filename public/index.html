@@ -769,6 +769,8 @@
 -->
 <script src="vendor/capacitor-core.js"></script>
 <script src="vendor/capacitor-share.js"></script>
+<script src="vendor/capacitor-app.js"></script>
+<script src="vendor/capacitor-local-notifications.js"></script>
 <script>
 // ── State ─────────────────────────────────────────────────────────
 let myPlayerId = null;
@@ -1018,7 +1020,9 @@ function handleMessage(msg) {
     myPlayerId = msg.playerId;
     isHost = msg.isHost;
   } else if (msg.type === 'room_state') {
+    const prevRoomState = roomState;
     roomState = msg;
+    maybeNotifyMyTurn(prevRoomState, roomState);
     applyRoomState();
   } else if (msg.type === 'add') {
     if (roomState) {
@@ -1418,6 +1422,71 @@ async function shareInvite() {
   copyLink();
 }
 
+// ── Turn notifications ───────────────────────────────────────────
+// Native-only: alerts a player when it becomes their turn while the app is
+// backgrounded. vendor/capacitor-app.js + vendor/capacitor-local-notifications.js
+// (loaded above) populate Capacitor.Plugins.App / .LocalNotifications.
+const NOTIF_PERMISSION_ASKED_KEY = 'barpicker_notif_permission_asked';
+let appIsActive = true; // assume foreground; only native App events flip this
+
+async function requestNotificationPermissionOnce() {
+  const cap = window.Capacitor;
+  if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return; // web/browser: skip entirely
+  if (!cap.Plugins || !cap.Plugins.LocalNotifications) return;
+  if (localStorage.getItem(NOTIF_PERMISSION_ASKED_KEY)) return; // already asked once, granted or denied
+
+  try {
+    await cap.Plugins.LocalNotifications.requestPermissions();
+  } catch (err) {
+    console.log('[notifications] permission request failed', err);
+  } finally {
+    localStorage.setItem(NOTIF_PERMISSION_ASKED_KEY, '1');
+  }
+}
+
+function initAppStateTracking() {
+  const cap = window.Capacitor;
+  if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return; // web/browser: skip entirely
+  if (!cap.Plugins || !cap.Plugins.App) return;
+
+  cap.Plugins.App.addListener('appStateChange', ({ isActive }) => {
+    appIsActive = isActive;
+  });
+}
+
+// Mirrors the server's currentTurnPlayerId() (server.js) exactly — strict
+// modulo, no disconnected-player skipping — since we only want to notify
+// when it's a turn the player could actually act on right now.
+function currentTurnPlayerId(state) {
+  if (!state || state.state !== 'playing') return null;
+  const len = state.players.length;
+  if (len === 0) return null;
+  return state.players[state.turnIndex % len].id;
+}
+
+// Called from handleMessage() with the room_state before and after applying
+// an incoming update, so we can detect an actual turn CHANGE (not just a
+// re-broadcast of the same turn) landing on me while backgrounded.
+function maybeNotifyMyTurn(prevState, newState) {
+  const cap = window.Capacitor;
+  if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return; // web/browser: skip entirely
+  if (!cap.Plugins || !cap.Plugins.LocalNotifications) return;
+  if (appIsActive) return; // only notify while backgrounded
+
+  const prevTurnId = currentTurnPlayerId(prevState);
+  const newTurnId = currentTurnPlayerId(newState);
+  if (newTurnId !== myPlayerId) return; // not (now) my turn
+  if (prevTurnId === newTurnId) return; // no actual change -- don't re-fire
+
+  cap.Plugins.LocalNotifications.schedule({
+    notifications: [{
+      id: Math.floor(Math.random() * 2147483647),
+      title: 'Your turn!',
+      body: "It's your turn to eliminate a bar!",
+    }],
+  }).catch(err => console.log('[notifications] schedule failed', err));
+}
+
 function toggleMenu() {
   const panel = document.getElementById('menuPanel');
   const isOpen = panel.classList.contains('open');
@@ -1487,6 +1556,8 @@ function launchConfetti() {
 window.addEventListener('DOMContentLoaded', () => {
   pinSafeAreaBottom();
   initFindBarsFilters();
+  initAppStateTracking();
+  requestNotificationPermissionOnce();
   const params = new URLSearchParams(location.search);
   const r = params.get('room');
   if (r) {
