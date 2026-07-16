@@ -1,0 +1,9 @@
+{
+  "appId": "com.lukecollins.barpicker",
+  "appName": "Bar Picker",
+  "webDir": "public",
+  "server": {
+    "url": "https://bar-picker-production.up.railway.app",
+    "cleartext": false
+  }
+}

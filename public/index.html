@@ -600,7 +600,10 @@
     <div style="font-size:11px;color:var(--text-muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">Room Code</div>
     <div class="room-code-big" id="waitingRoomCode">—</div>
     <div class="share-hint">Share this code with your friends</div>
-    <button class="copy-link-btn" onclick="copyLink()">⎘ copy invite link</button>
+    <div style="display:flex; gap:14px; justify-content:center; align-items:center;">
+      <button class="copy-link-btn" onclick="copyLink()">⎘ copy invite link</button>
+      <button class="copy-link-btn" onclick="shareInvite()">⤴ share</button>
+    </div>
   </div>
 
   <div class="waiting-section">
@@ -1367,6 +1370,31 @@ function toggleElim() {
 function copyLink() {
   const url = location.origin + location.pathname + '?room=' + roomCode;
   navigator.clipboard.writeText(url).then(() => showToast('🔗 Invite link copied!'));
+}
+
+// Capacitor injects window.Capacitor into any page it loads (even a remote
+// server.url page like this one) — no bundler/ES import available here, so
+// the plugin is reached via the global bridge instead of `import`.
+async function shareInvite() {
+  const url = location.origin + location.pathname + '?room=' + roomCode;
+  const shareData = {
+    title: 'Join my Bar Picker game!',
+    text: `Join my bar elimination game! Room code: ${roomCode}`,
+    url,
+  };
+
+  const cap = window.Capacitor;
+  if (cap && cap.isNativePlatform && cap.isNativePlatform() && cap.Plugins && cap.Plugins.Share) {
+    try { await cap.Plugins.Share.share(shareData); } catch (err) { /* user cancelled the share sheet */ }
+    return;
+  }
+
+  if (navigator.share) {
+    try { await navigator.share(shareData); } catch (err) { /* user cancelled the share sheet */ }
+    return;
+  }
+
+  copyLink();
 }
 
 function toggleMenu() {
