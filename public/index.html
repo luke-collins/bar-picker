@@ -1027,8 +1027,11 @@ function applyRoomState() {
 }
 
 function showScreen(id) {
+  const target = document.getElementById(id);
+  const isSwitch = !target.classList.contains('active');
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
+  target.classList.add('active');
+  if (isSwitch) window.scrollTo(0, 0);
 }
 
 // ── WAITING ROOM render ───────────────────────────────────────────
