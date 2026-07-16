@@ -1190,16 +1190,14 @@ function renderGame() {
   const online = players.filter(p => p.connected).length;
   document.getElementById('gamePillCount').textContent = online + ' online';
 
-  // Turn logic
+  // Turn logic -- must match server.js's currentTurnPlayerId() exactly
+  // (players[turnIndex % len], no skipping disconnected players), since the
+  // server uses that same raw definition to decide whose eliminate messages
+  // to accept. Any divergence here (e.g. a "skip to next connected player"
+  // shortcut) would let a client show elim buttons as enabled for someone
+  // the server will actually reject.
   const len = players.length;
-  const currentTurnPlayer = isDone ? null : (() => {
-    let idx = s.turnIndex % len;
-    for (let i = 0; i < len; i++) {
-      const p = players[(idx + i) % len];
-      if (p.connected) return p;
-    }
-    return players[idx % len];
-  })();
+  const currentTurnPlayer = isDone ? null : players[s.turnIndex % len];
   const isMyTurn = !isDone && currentTurnPlayer && currentTurnPlayer.id === myPlayerId;
 
   // Turn banner
