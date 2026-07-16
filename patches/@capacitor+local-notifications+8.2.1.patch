@@ -1,0 +1,209 @@
+diff --git a/node_modules/@capacitor/local-notifications/ios/Sources/LocalNotificationsPlugin/LocalNotificationsHandler.swift b/node_modules/@capacitor/local-notifications/ios/Sources/LocalNotificationsPlugin/LocalNotificationsHandler.swift
+index efe2bae..1072b58 100644
+--- a/node_modules/@capacitor/local-notifications/ios/Sources/LocalNotificationsPlugin/LocalNotificationsHandler.swift
++++ b/node_modules/@capacitor/local-notifications/ios/Sources/LocalNotificationsPlugin/LocalNotificationsHandler.swift
+@@ -35,27 +35,13 @@ public class LocalNotificationsHandler: NSObject, NotificationHandlerProtocol {
+             }
+         }
+ 
+-        if let optionsArray = self.plugin?.getConfig().getArray("presentationOptions") as? [String] {
+-            var presentationOptions = UNNotificationPresentationOptions.init()
+-
+-            optionsArray.forEach { option in
+-                switch option {
+-                case "banner":
+-                    presentationOptions.insert(.banner)
+-                case "list":
+-                    presentationOptions.insert(.list)
+-                case "badge":
+-                    presentationOptions.insert(.badge)
+-                case "sound":
+-                    presentationOptions.insert(.sound)
+-                default:
+-                    print("Unrecognized presentation option: \(option)")
+-                }
+-            }
+-
+-            return presentationOptions
+-        }
+-
++        // PluginConfig.getArray(_:_:) is pure-Swift (not @objc-exposed) and
++        // gated behind an experimental compiler flag not enabled in standard
++        // toolchains ("#if compiler(>=5.3) && $NonescapableTypes" -- same
++        // root cause as the @capacitor/share and other patches in this repo),
++        // with no ObjC runtime fallback available since it's never bridged.
++        // This app doesn't set a custom "presentationOptions" plugin config,
++        // so always use the documented default rather than reading it.
+         return [
+             .badge,
+             .sound,
+@@ -104,6 +90,22 @@ public class LocalNotificationsHandler: NSObject, NotificationHandlerProtocol {
+ 
+     }
+ 
++    // JSTypes.coerceDictionaryToJSObject is pure-Swift (not @objc-exposed)
++    // and gated the same way as PluginConfig.getArray above, with no ObjC
++    // runtime fallback available. Reimplemented for our own purposes:
++    // userInfo here only ever contains values this plugin itself wrote (see
++    // makeNotificationContent in LocalNotificationsPlugin.swift), which are
++    // already JSValue-compatible.
++    func coerceToJSObject(_ dictionary: [AnyHashable: Any]?) -> JSObject? {
++        guard let dictionary = dictionary else { return nil }
++        var result = JSObject()
++        for (key, value) in dictionary {
++            guard let stringKey = key as? String, let jsValue = value as? any JSValue else { continue }
++            result[stringKey] = jsValue
++        }
++        return result
++    }
++
+     func makePendingNotificationRequestJSObject(_ request: UNNotificationRequest) -> JSObject {
+         var notification: JSObject = [
+             "id": Int(request.identifier) ?? -1,
+@@ -111,7 +113,7 @@ public class LocalNotificationsHandler: NSObject, NotificationHandlerProtocol {
+             "body": request.content.body
+         ]
+ 
+-        if let userInfo = JSTypes.coerceDictionaryToJSObject(request.content.userInfo) {
++        if let userInfo = coerceToJSObject(request.content.userInfo) {
+             var extra = userInfo["cap_extra"] as? JSObject ?? userInfo
+ 
+             // check for any dates and convert them to strings
+diff --git a/node_modules/@capacitor/local-notifications/ios/Sources/LocalNotificationsPlugin/LocalNotificationsPlugin.swift b/node_modules/@capacitor/local-notifications/ios/Sources/LocalNotificationsPlugin/LocalNotificationsPlugin.swift
+index 8cf6cca..b2fbcc2 100644
+--- a/node_modules/@capacitor/local-notifications/ios/Sources/LocalNotificationsPlugin/LocalNotificationsPlugin.swift
++++ b/node_modules/@capacitor/local-notifications/ios/Sources/LocalNotificationsPlugin/LocalNotificationsPlugin.swift
+@@ -53,19 +53,32 @@ public class LocalNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
+         self.shouldStringifyDatesInCalls = false
+     }
+ 
++    // capacitor-swift-pm 8.x's .swiftinterface incorrectly gates several
++    // CAPPluginCall/CAPBridgeProtocol APIs behind an experimental compiler
++    // flag ("#if compiler(>=5.3) && $NonescapableTypes") not enabled in
++    // standard toolchains, even though they're genuinely present in the
++    // compiled binary (same root cause as the @capacitor/share patch). This
++    // reads the always-available JSArray-returning getArray(_:_:) overload
++    // and downcasts each element, instead of the gated generic
++    // getArray<T>(_:_:) overload.
++    private func getObjectArray(_ call: CAPPluginCall, _ key: String) -> [JSObject] {
++        call.getArray(key, []).compactMap { $0 as? JSObject }
++    }
++
+     /**
+      * Schedule a notification.
+      */
+     @objc func schedule(_ call: CAPPluginCall) {
+-        guard let notifications = call.getArray("notifications", JSObject.self) else {
+-            call.reject("Must provide notifications array as notifications option")
++        let notifications = getObjectArray(call, "notifications")
++        guard !notifications.isEmpty else {
++            call.unavailable("Must provide notifications array as notifications option")
+             return
+         }
+         var ids = [String]()
+ 
+         for notification in notifications {
+             guard let identifier = notification["id"] as? Int else {
+-                call.reject("Notification missing identifier")
++                call.unavailable("Notification missing identifier")
+                 return
+             }
+ 
+@@ -76,7 +89,7 @@ public class LocalNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
+                 content = try makeNotificationContent(notification)
+             } catch {
+                 CAPLog.print(error.localizedDescription)
+-                call.reject("Unable to make notification", nil, error)
++                call.unavailable("Unable to make notification: \(error.localizedDescription)")
+                 return
+             }
+ 
+@@ -87,7 +100,7 @@ public class LocalNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
+                     try trigger = handleScheduledNotification(call, schedule)
+                 }
+             } catch {
+-                call.reject("Unable to create notification, trigger failed", nil, error)
++                call.unavailable("Unable to create notification, trigger failed: \(error.localizedDescription)")
+                 return
+             }
+ 
+@@ -100,7 +113,7 @@ public class LocalNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
+             center.add(request) { (error: Error?) in
+                 if let theError = error {
+                     CAPLog.print(theError.localizedDescription)
+-                    call.reject(theError.localizedDescription)
++                    call.unavailable(theError.localizedDescription)
+                 }
+             }
+ 
+@@ -123,7 +136,7 @@ public class LocalNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
+     @objc override public func requestPermissions(_ call: CAPPluginCall) {
+         self.notificationDelegationHandler.requestPermissions { granted, error in
+             guard error == nil else {
+-                call.reject(error!.localizedDescription)
++                call.unavailable(error!.localizedDescription)
+                 return
+             }
+             call.resolve(["display": granted ? "granted" : "denied"])
+@@ -161,8 +174,9 @@ public class LocalNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
+      * Cancel notifications by id
+      */
+     @objc func cancel(_ call: CAPPluginCall) {
+-        guard let notifications = call.getArray("notifications", JSObject.self), notifications.count > 0 else {
+-            call.reject("Must supply notifications to cancel")
++        let notifications = getObjectArray(call, "notifications")
++        guard !notifications.isEmpty else {
++            call.unavailable("Must supply notifications to cancel")
+             return
+         }
+ 
+@@ -201,9 +215,7 @@ public class LocalNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
+      * Register allowed action types that a notification may present.
+      */
+     @objc func registerActionTypes(_ call: CAPPluginCall) {
+-        guard let types = call.getArray("types", JSObject.self) else {
+-            return
+-        }
++        let types = getObjectArray(call, "types")
+ 
+         makeActionTypes(types)
+ 
+@@ -310,7 +322,7 @@ public class LocalNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
+             let dateInfo = Calendar.current.dateComponents(in: TimeZone.current, from: at)
+ 
+             if dateInfo.date! < Date() {
+-                call.reject("Scheduled time must be *after* current time")
++                call.unavailable("Scheduled time must be *after* current time")
+                 return nil
+             }
+ 
+@@ -573,7 +585,16 @@ public class LocalNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
+             return nil
+         }
+ 
+-        return bridge?.localURL(fromWebURL: webURL)
++        // localURL(fromWebURL:) is gated the same way as CAPBridgeProtocol's
++        // viewController property (see getObjectArray above) but it's a
++        // method, not a property, so KVC can't reach it -- invoke it via the
++        // Objective-C runtime instead, using the exact selector confirmed in
++        // the framework's generated Objective-C header ("localURLFromWebURL:").
++        guard let bridgeObject = bridge as? NSObject else { return nil }
++        let selector = NSSelectorFromString("localURLFromWebURL:")
++        guard bridgeObject.responds(to: selector) else { return nil }
++        guard let result = bridgeObject.perform(selector, with: webURL) else { return nil }
++        return result.takeUnretainedValue() as? URL
+     }
+ 
+     /**
+@@ -616,8 +637,9 @@ public class LocalNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
+      * Remove specified notifications from Notification Center
+      */
+     @objc func removeDeliveredNotifications(_ call: CAPPluginCall) {
+-        guard let notifications = call.getArray("notifications", JSObject.self) else {
+-            call.reject("Must supply notifications to remove")
++        let notifications = getObjectArray(call, "notifications")
++        guard !notifications.isEmpty else {
++            call.unavailable("Must supply notifications to remove")
+             return
+         }
+ 

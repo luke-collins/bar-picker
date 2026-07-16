@@ -1,0 +1,19 @@
+diff --git a/node_modules/@capacitor/app/ios/Sources/AppPlugin/AppPlugin.swift b/node_modules/@capacitor/app/ios/Sources/AppPlugin/AppPlugin.swift
+index c93b84a..89a7969 100644
+--- a/node_modules/@capacitor/app/ios/Sources/AppPlugin/AppPlugin.swift
++++ b/node_modules/@capacitor/app/ios/Sources/AppPlugin/AppPlugin.swift
+@@ -89,7 +89,13 @@ public class AppPlugin: CAPPlugin, CAPBridgedPlugin {
+                 "version": info["CFBundleShortVersionString"] as? String ?? ""
+             ])
+         } else {
+-            call.reject("Unable to get App Info")
++            // capacitor-swift-pm 8.x's .swiftinterface incorrectly gates
++            // CAPPluginCall.reject() behind an experimental compiler flag not
++            // enabled in standard toolchains (see the @capacitor/share and
++            // @capacitor/local-notifications patches for the full
++            // explanation) -- unavailable() isn't gated and still produces a
++            // proper rejected promise.
++            call.unavailable("Unable to get App Info")
+         }
+ 
+     }
