@@ -755,6 +755,18 @@
   </div>
 </div>
 
+<!--
+  This app has no bundler, so Capacitor plugins can't be pulled in via
+  `import` — that only works when a bundler includes the plugin's JS
+  registration code in your app bundle. Without it, Capacitor.Plugins.Share
+  never gets populated (native `cap sync` only wires up the Swift side).
+  These are the plugins' own plain browser-ready scripts (see each
+  package's "unpkg" field), vendored locally and loaded in dependency
+  order: capacitor-core.js defines the shared `capacitorExports` global
+  that capacitor-share.js's registerPlugin('Share', ...) call depends on.
+-->
+<script src="vendor/capacitor-core.js"></script>
+<script src="vendor/capacitor-share.js"></script>
 <script>
 // ── State ─────────────────────────────────────────────────────────
 let myPlayerId = null;
@@ -1372,9 +1384,10 @@ function copyLink() {
   navigator.clipboard.writeText(url).then(() => showToast('🔗 Invite link copied!'));
 }
 
-// Capacitor injects window.Capacitor into any page it loads (even a remote
-// server.url page like this one) — no bundler/ES import available here, so
-// the plugin is reached via the global bridge instead of `import`.
+// vendor/capacitor-core.js + vendor/capacitor-share.js (loaded above, see
+// their comment) populate window.Capacitor and Capacitor.Plugins.Share —
+// no bundler/ES import available here, so the plugin is reached via the
+// global bridge instead of `import`.
 async function shareInvite() {
   const url = location.origin + location.pathname + '?room=' + roomCode;
   const shareData = {
@@ -1384,13 +1397,17 @@ async function shareInvite() {
   };
 
   const cap = window.Capacitor;
-  if (cap && cap.isNativePlatform && cap.isNativePlatform() && cap.Plugins && cap.Plugins.Share) {
-    try { await cap.Plugins.Share.share(shareData); } catch (err) { /* user cancelled the share sheet */ }
+  const isNative = !!(cap && cap.isNativePlatform && cap.isNativePlatform());
+  const hasShare = !!(cap && cap.Plugins && cap.Plugins.Share);
+  console.log('[shareInvite]', { hasCapacitor: !!cap, isNative, hasShare, hasNavigatorShare: !!navigator.share });
+
+  if (isNative && hasShare) {
+    try { await cap.Plugins.Share.share(shareData); } catch (err) { console.log('[shareInvite] native share cancelled/failed', err); }
     return;
   }
 
   if (navigator.share) {
-    try { await navigator.share(shareData); } catch (err) { /* user cancelled the share sheet */ }
+    try { await navigator.share(shareData); } catch (err) { console.log('[shareInvite] web share cancelled/failed', err); }
     return;
   }
 
