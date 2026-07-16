@@ -548,16 +548,6 @@
     display: flex; align-items: center;
   }
 
-  /* maps link in winner banner (a <button>, not an <a>, so it can run JS --
-     reset button defaults to keep the exact prior link-like appearance) */
-  .winner-maps-link {
-    display: inline-block; margin-top: 7px; font-size: 12px;
-    color: var(--green); text-decoration: none; position: relative;
-    letter-spacing: 0.2px;
-    background: none; border: none; padding: 0; font-family: inherit;
-    cursor: pointer;
-  }
-  .winner-maps-link:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -725,7 +715,6 @@
   <div class="winner-banner" id="winnerBanner">
     <div class="winner-lbl">🏆 Bar Winner</div>
     <div class="winner-name" id="winnerName">—</div>
-    <button type="button" class="winner-maps-link" id="winnerMapsLink" onclick="openDirections()">📍 Get Directions</button>
     <div class="winner-icon">🍺</div>
   </div>
 
@@ -787,7 +776,6 @@ let roomCode = null;
 let roomState = null; // full room state from server
 let elimOpen = false;
 let prevWinnerId = null;
-let currentWinnerBarName = null;
 let ws = null;
 let pendingCode = null;
 let listMode = 'findbars'; // 'findbars' | 'custom'
@@ -1246,7 +1234,6 @@ function renderGame() {
   if (isDone && active.length === 1) {
     winnerBanner.classList.add('visible');
     document.getElementById('winnerName').textContent = active[0].name;
-    currentWinnerBarName = active[0].name;
     if (prevWinnerId !== active[0].id) {
       launchConfetti();
       showToast('🍺 ' + active[0].name + ' wins!');
@@ -1424,58 +1411,6 @@ async function shareInvite() {
   }
 
   copyLink();
-}
-
-// Winner banner's "Get Directions" button. Web: unchanged Google Maps web
-// search behavior. Native: check whether Google Maps is installed (via the
-// custom UrlChecker plugin -- see UrlCheckerPlugin.swift; no official
-// Capacitor plugin exposes canOpenURL) and offer a picker only when both
-// apps are available, otherwise open Apple Maps directly.
-async function openDirections() {
-  const barName = currentWinnerBarName;
-  if (!barName) return;
-  const query = encodeURIComponent(barName + ' New Orleans LA');
-
-  const cap = window.Capacitor;
-  const isNative = !!(cap && cap.isNativePlatform && cap.isNativePlatform());
-
-  if (!isNative) {
-    window.open('https://www.google.com/maps/search/' + query, '_blank', 'noopener');
-    return;
-  }
-
-  const appleMapsUrl = 'maps://?q=' + query;
-  const googleMapsUrl = 'comgooglemaps://?q=' + query;
-
-  let googleMapsInstalled = false;
-  try {
-    if (!cap.Plugins.UrlChecker) cap.registerPlugin('UrlChecker', {});
-    const result = await cap.Plugins.UrlChecker.canOpenUrl({ url: 'comgooglemaps://' });
-    googleMapsInstalled = !!result.value;
-  } catch (err) {
-    console.log('[directions] canOpenUrl check failed', err);
-  }
-
-  if (!googleMapsInstalled) {
-    window.location.href = appleMapsUrl;
-    return;
-  }
-
-  try {
-    const result = await cap.Plugins.ActionSheet.showActions({
-      title: 'Get Directions',
-      options: [
-        { title: 'Open in Apple Maps' },
-        { title: 'Open in Google Maps' },
-      ],
-      cancelable: true,
-    });
-    if (result.canceled || result.index === -1) return;
-    window.location.href = result.index === 0 ? appleMapsUrl : googleMapsUrl;
-  } catch (err) {
-    console.log('[directions] action sheet failed', err);
-    window.location.href = appleMapsUrl;
-  }
 }
 
 // ── Turn notifications (native push) ─────────────────────────────
