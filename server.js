@@ -204,14 +204,8 @@ wss.on('connection', (ws) => {
         const oldWs = currentRoom.clients.get(player.id);
         if (oldWs && oldWs !== ws) oldWs.terminate();
       } else {
-        // New player
-        if (currentRoom.state === 'playing') {
-          ws.send(JSON.stringify({ type: 'error', message: 'Game already started. Ask for the room code to spectate.' }));
-          // still let them in as spectator (no player entry)
-          currentRoom.clients.set('spec_' + crypto.randomBytes(3).toString('hex'), ws);
-          ws.send(JSON.stringify(roomSummary(currentRoom)));
-          return;
-        }
+        // New player — joins as a full participant even if the game is
+        // already in progress, appended to the end of the turn order.
         const duplicate = currentRoom.players.find(p => p.username.toLowerCase() === username.toLowerCase());
         if (duplicate) {
           ws.send(JSON.stringify({ type: 'error', message: 'Username taken in this room.' }));
@@ -219,7 +213,17 @@ wss.on('connection', (ws) => {
         }
         myPlayerId = crypto.randomBytes(4).toString('hex');
         player = { id: myPlayerId, username, connected: true };
+        const priorPlayerCount = currentRoom.players.length;
         currentRoom.players.push(player);
+        if (currentRoom.state === 'playing' && priorPlayerCount > 0) {
+          // room.turnIndex % players.length picks the active player; growing
+          // players.length changes that result unless turnIndex is first
+          // collapsed to its effective value under the OLD length, which is
+          // always < priorPlayerCount <= the new length (so re-modulo by the
+          // new length is a no-op) — keeps the current turn unchanged and
+          // just extends the rotation for future turns.
+          currentRoom.turnIndex = currentRoom.turnIndex % priorPlayerCount;
+        }
         if (!currentRoom.host) currentRoom.host = myPlayerId;
       }
 

@@ -1346,9 +1346,11 @@ function joinRoom() {
 }
 
 function enterRoom(code, username) {
-  connect(code, username, () => {
-    showScreen('waitingScreen');
-  });
+  // Don't guess a screen here — applyRoomState() (driven by the server's
+  // authoritative room_state, sent immediately on join) is the sole router,
+  // so a mid-game joiner lands straight on the game screen instead of
+  // flashing the waiting room first.
+  connect(code, username);
 }
 
 function setEntryError(msg) {
