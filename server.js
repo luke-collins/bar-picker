@@ -136,6 +136,7 @@ const DEFAULT_BARS = [
 */
 
 const rooms = new Map();
+const DISCONNECT_GRACE_MS = 45 * 1000;
 
 function getRoom(code) {
   if (!rooms.has(code)) {
@@ -148,9 +149,41 @@ function getRoom(code) {
       turnIndex: 0,
       host: null,       // first player id
       eliminationLog: [],
+      disconnectTimers: new Map(), // playerId -> Timeout, pending grace-period removal
     });
   }
   return rooms.get(code);
+}
+
+// Removes a player entirely (post grace-period) and keeps turnIndex pointing
+// at the correct player despite the array shrinking. If the removed player
+// held the turn, this lands on whoever shifted into their old slot (their
+// successor), so play advances instead of stalling on someone who's gone;
+// otherwise the active player's index is only shifted down when the removal
+// happened earlier in the array than them.
+function removePlayer(room, playerId) {
+  const idx = room.players.findIndex(p => p.id === playerId);
+  if (idx === -1) return;
+
+  const wasHost = room.host === playerId;
+  const activeIdx = (room.state === 'playing' && room.players.length > 0)
+    ? room.turnIndex % room.players.length
+    : null;
+
+  room.players.splice(idx, 1);
+  room.clients.delete(playerId);
+
+  if (room.players.length === 0) {
+    room.turnIndex = 0;
+  } else if (activeIdx !== null) {
+    room.turnIndex = activeIdx > idx ? activeIdx - 1
+      : activeIdx === idx ? idx % room.players.length
+      : activeIdx;
+  }
+
+  if (wasHost) {
+    room.host = room.players.length > 0 ? room.players[0].id : null;
+  }
 }
 
 function broadcastAll(room, message) {
@@ -200,6 +233,12 @@ wss.on('connection', (ws) => {
         // Reconnect
         player.connected = true;
         myPlayerId = player.id;
+        // Cancel any pending grace-period removal from a prior disconnect
+        const pendingRemoval = currentRoom.disconnectTimers.get(player.id);
+        if (pendingRemoval) {
+          clearTimeout(pendingRemoval);
+          currentRoom.disconnectTimers.delete(player.id);
+        }
         // If old ws exists, close it silently
         const oldWs = currentRoom.clients.get(player.id);
         if (oldWs && oldWs !== ws) oldWs.terminate();
@@ -353,17 +392,36 @@ wss.on('connection', (ws) => {
 
   ws.on('close', () => {
     if (currentRoom && myPlayerId) {
-      const player = currentRoom.players.find(p => p.id === myPlayerId);
+      // A newer connection may have already replaced this one (e.g. a fast
+      // reconnect that terminated this stale socket) -- that player is still
+      // genuinely connected, so don't mark them disconnected or schedule a
+      // removal for them based on this now-superseded socket closing.
+      if (currentRoom.clients.get(myPlayerId) !== ws) return;
+
+      const room = currentRoom;
+      const playerId = myPlayerId;
+      const player = room.players.find(p => p.id === playerId);
       if (player) {
         player.connected = false;
-        broadcastAll(currentRoom, roomSummary(currentRoom));
+        broadcastAll(room, roomSummary(room));
+
+        // Grace period before actually removing them, so a brief network
+        // drop doesn't instantly boot someone out of the game.
+        const timer = setTimeout(() => {
+          room.disconnectTimers.delete(playerId);
+          const p = room.players.find(pl => pl.id === playerId);
+          if (!p || p.connected) return; // reconnected in the meantime
+          removePlayer(room, playerId);
+          broadcastAll(room, roomSummary(room));
+        }, DISCONNECT_GRACE_MS);
+        room.disconnectTimers.set(playerId, timer);
       }
       // Clean up if empty
-      const anyConnected = currentRoom.players.some(p => p.connected);
+      const anyConnected = room.players.some(p => p.connected);
       if (!anyConnected) {
         setTimeout(() => {
-          const r = rooms.get(currentRoom.code);
-          if (r && !r.players.some(p => p.connected)) rooms.delete(currentRoom.code);
+          const r = rooms.get(room.code);
+          if (r && !r.players.some(p => p.connected)) rooms.delete(room.code);
         }, 30 * 60 * 1000);
       }
     }
