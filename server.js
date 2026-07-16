@@ -10,6 +10,26 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 app.use(express.json());
+
+// ── UNIVERSAL LINKS (iOS) ──────────────────────────────────────────────────
+// Apple's CDN fetches this at load time to decide which URLs on this domain
+// should open the native app instead of Safari -- must be served with no
+// redirects, as application/json, at exactly this path (no .json extension).
+// Requires the "Associated Domains" capability (applinks:<this-domain>) to
+// also be added to the iOS app in Xcode; the file alone isn't enough.
+app.get('/.well-known/apple-app-site-association', (req, res) => {
+  res.type('application/json').json({
+    applinks: {
+      details: [
+        {
+          appID: 'S78XGMW883.com.lukecollins.barpicker',
+          paths: ['*'],
+        },
+      ],
+    },
+  });
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── FIND BARS (Google Places API) ────────────────────────────────────────

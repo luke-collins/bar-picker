@@ -40,18 +40,25 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func application(_ application: UIApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
-        // Called when the app was launched with an activity, including Universal Links.
-        // ApplicationDelegateProxy's continue-userActivity overload is compiled out of the
-        // Capacitor XCFramework's interface under Swift < 6 (it's gated behind the
-        // $NonescapableTypes feature flag), so it can't be called directly here on this
-        // toolchain. Replicate its Universal Link handling so deep linking still works.
+        // Called when the app was launched with an activity, including Universal Links
+        // (e.g. tapping a shared https://bar-picker-production.up.railway.app/?room=XXXX
+        // link -- see the Associated Domains capability + apple-app-site-association
+        // route on the server for how iOS decides to route that URL here instead of
+        // Safari). ApplicationDelegateProxy's continue-userActivity overload is compiled
+        // out of the Capacitor XCFramework's interface under Swift < 6 (it's gated
+        // behind the $NonescapableTypes feature flag), so it can't be called directly
+        // here on this toolchain, and posting .capacitorOpenUniversalLink wouldn't help
+        // either since nothing observes it now that @capacitor/app has been removed.
+        // Instead, just load the incoming URL directly in the existing web view: the
+        // app has no client-side router, so a normal page load already re-reads the
+        // ?room= param on DOMContentLoaded and pre-fills the join form, identically to
+        // opening the same link in a browser. `webView` (unlike `bridge`) isn't gated.
         guard userActivity.activityType == NSUserActivityTypeBrowsingWeb,
-            let url = userActivity.webpageURL else {
+            let url = userActivity.webpageURL,
+            let bridgeVC = window?.rootViewController as? CAPBridgeViewController else {
             return false
         }
-        NotificationCenter.default.post(name: .capacitorOpenUniversalLink, object: [
-            "url": url
-        ])
+        bridgeVC.webView?.load(URLRequest(url: url))
         return true
     }
 
