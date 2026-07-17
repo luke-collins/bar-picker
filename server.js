@@ -30,6 +30,11 @@ app.get('/.well-known/apple-app-site-association', (req, res) => {
   });
 });
 
+// ── SUPPORT PAGE (App Store Connect "Support URL") ──────────────────────────
+app.get('/support', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'support.html'));
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── FIND BARS (Google Places API) ────────────────────────────────────────
@@ -254,19 +259,15 @@ function sendApnsPush(deviceToken, { title, body }) {
 // they've registered a device token. Fire-and-forget: push delivery must
 // never block or fail game logic.
 function notifyCurrentTurnPlayer(room) {
-  // TEMP DEBUG (remove once push delivery is confirmed working)
-  console.log(`[apns][debug] notifyCurrentTurnPlayer room=${room.code} enabled=${APNS_ENABLED} state=${room.state} host=${APNS_HOST}`);
   if (!APNS_ENABLED || room.state !== 'playing') return;
   const playerId = currentTurnPlayerId(room);
   const player = room.players.find(p => p.id === playerId);
-  console.log(`[apns][debug] current turn player=${player ? player.username : '?'} hasToken=${!!(player && player.pushToken)}`);
   if (!player || !player.pushToken) return;
 
   sendApnsPush(player.pushToken, {
     title: 'Your turn!',
     body: "It's your turn to eliminate a bar!",
-  }).then(() => console.log(`[apns][debug] push sent OK to ${player.username}`))
-    .catch(err => console.log('[apns] push failed', err.message));
+  }).catch(err => console.log('[apns] push failed', err.message));
 }
 
 /*
@@ -425,8 +426,6 @@ wss.on('connection', (ws) => {
       if (!token) return;
       const player = currentRoom.players.find(p => p.id === myPlayerId);
       if (player) player.pushToken = token;
-      // TEMP DEBUG (remove once push delivery is confirmed working)
-      console.log(`[apns][debug] registered token for ${player ? player.username : '?'} in room ${currentRoom.code}: ${token.slice(0, 8)}...${token.slice(-4)} (len ${token.length})`);
     }
 
     // ── START GAME ────────────────────────────────────────────────────────

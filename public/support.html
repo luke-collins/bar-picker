@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Bar Picker — Support</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0806;
+    --surface: #161008;
+    --gold: #e8a435;
+    --amber: #f5cc70;
+    --text: #ede0c8;
+    --text-muted: #6b5c42;
+    --border: #261e12;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { overflow-x: hidden; max-width: 100vw; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    max-width: 420px;
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 36px 32px;
+    text-align: center;
+  }
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 32px;
+    letter-spacing: 1px;
+    color: var(--gold);
+    margin-bottom: 18px;
+  }
+  h1 {
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--amber);
+    margin-bottom: 12px;
+  }
+  p {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-muted);
+    margin-bottom: 24px;
+  }
+  .email-link {
+    display: inline-block;
+    background: var(--gold);
+    color: var(--bg);
+    font-weight: 500;
+    font-size: 14px;
+    text-decoration: none;
+    padding: 12px 24px;
+    border-radius: 10px;
+  }
+  .email-link:hover { background: var(--amber); }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">Bar Picker</div>
+    <h1>Need help?</h1>
+    <p>If you're running into an issue or have a question about Bar Picker, send us a message and we'll get back to you.</p>
+    <a class="email-link" href="mailto:luke.collins54@gmail.com">Email Support</a>
+  </div>
+</body>
+</html>

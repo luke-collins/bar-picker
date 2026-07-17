@@ -563,26 +563,6 @@
     cursor: pointer;
   }
   .winner-maps-link:hover { text-decoration: underline; }
-
-  /* TEMP DEBUG (remove once push delivery is confirmed working) */
-  .menu-debug-section {
-    margin-top: auto; padding: 14px 20px calc(16px + env(safe-area-inset-bottom));
-    border-top: 1px solid var(--border2);
-  }
-  .menu-debug-label {
-    font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
-    color: var(--text-muted); margin-bottom: 8px;
-  }
-  .menu-debug-line {
-    font-size: 11px; color: var(--text-muted); line-height: 1.5;
-    word-break: break-word; font-family: monospace;
-  }
-  .menu-debug-note {
-    font-size: 11px; color: var(--text-muted); line-height: 1.4; margin-top: 8px;
-  }
-  .menu-debug-section .menu-item {
-    padding: 10px 0; font-size: 13px;
-  }
 </style>
 </head>
 <body>
@@ -594,17 +574,6 @@
 <div class="menu-panel" id="menuPanel">
   <div class="menu-panel-header">Bar Picker</div>
   <button class="menu-item" onclick="goHome()">⌂&nbsp; Home</button>
-
-  <!-- TEMP DEBUG (remove once push delivery is confirmed working) -->
-  <div class="menu-debug-section">
-    <div class="menu-debug-label">Push Debug</div>
-    <div class="menu-debug-line" id="pushDebugPermission">Permission: —</div>
-    <div class="menu-debug-line" id="pushDebugRegister">register(): —</div>
-    <div class="menu-debug-line" id="pushDebugToken">Token: —</div>
-    <div class="menu-debug-line" id="pushDebugSend">WS send: —</div>
-    <button class="menu-item" onclick="resetPushPermission()">↺&nbsp; Reset Push Permission</button>
-    <div class="menu-debug-note">Resets this app's memory of asking, so the real iOS prompt can appear again next launch. If iOS itself already denied notifications, only Settings → Bar Picker → Notifications can fix that -- this button can't override it.</div>
-  </div>
 </div>
 
 <!-- ── ENTRY SCREEN ─────────────────────────────────────────────── -->
@@ -1523,36 +1492,18 @@ async function openDirections() {
 const PUSH_PERMISSION_ASKED_KEY = 'barpicker_push_permission_asked';
 let pushToken = null;
 
-// TEMP DEBUG (remove once push delivery is confirmed working) -- writes into
-// the hamburger menu's "Push Debug" section, since a TestFlight build has no
-// attached console to read otherwise.
-function updatePushDebug(field, text) {
-  const el = document.getElementById('pushDebug' + field);
-  if (el) el.textContent = text;
-}
-function tokenPreview(token) {
-  if (!token) return '(none)';
-  if (token.length <= 8) return token;
-  return token.slice(0, 4) + '...' + token.slice(-4) + ' (len ' + token.length + ')';
-}
-
 async function initPushNotifications() {
   const cap = window.Capacitor;
   if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return; // web/browser: skip entirely
-  if (!cap.Plugins || !cap.Plugins.PushNotifications) {
-    updatePushDebug('Permission', 'PushNotifications plugin not found');
-    return;
-  }
+  if (!cap.Plugins || !cap.Plugins.PushNotifications) return;
   const push = cap.Plugins.PushNotifications;
 
   push.addListener('registration', (token) => {
     pushToken = token.value;
-    updatePushDebug('Token', 'received: ' + tokenPreview(pushToken));
     sendPushTokenIfReady();
   });
   push.addListener('registrationError', (err) => {
     console.log('[push] registration error', err);
-    updatePushDebug('Register', 'registrationError: ' + JSON.stringify(err));
   });
 
   try {
@@ -1561,32 +1512,15 @@ async function initPushNotifications() {
       // Already asked before (this launch or a prior one) -- check current
       // status instead of re-prompting.
       granted = (await push.checkPermissions()).receive === 'granted';
-      updatePushDebug('Permission', 'checkPermissions(): ' + (granted ? 'granted' : 'NOT granted'));
     } else {
       granted = (await push.requestPermissions()).receive === 'granted';
       localStorage.setItem(PUSH_PERMISSION_ASKED_KEY, '1');
-      updatePushDebug('Permission', 'requestPermissions(): ' + (granted ? 'granted' : 'NOT granted'));
     }
-    if (!granted) {
-      updatePushDebug('Register', 'skipped -- permission not granted');
-      return;
-    }
-    updatePushDebug('Register', 'calling register()...');
+    if (!granted) return;
     await push.register();
-    updatePushDebug('Register', 'register() called OK, waiting for token');
   } catch (err) {
     console.log('[push] setup failed', err);
-    updatePushDebug('Register', 'EXCEPTION: ' + (err && err.message ? err.message : String(err)));
   }
-}
-
-// Clears this app's own "already asked" memory so requestPermissions() (not
-// checkPermissions()) runs again on next launch. Can't force iOS's own OS-level
-// permission state though -- if the user truly denied it before, only the iOS
-// Settings app can undo that; this only resets our side of it.
-function resetPushPermission() {
-  localStorage.removeItem(PUSH_PERMISSION_ASKED_KEY);
-  updatePushDebug('Permission', 'reset -- relaunch the app to get a fresh prompt');
 }
 
 // Called once we might have both a token and a joined room (from the
@@ -1596,9 +1530,6 @@ function resetPushPermission() {
 function sendPushTokenIfReady() {
   if (pushToken && myPlayerId) {
     send({ type: 'register_push_token', token: pushToken });
-    updatePushDebug('Send', 'sent OK: ' + tokenPreview(pushToken));
-  } else {
-    updatePushDebug('Send', 'not sent yet (hasToken=' + !!pushToken + ', hasPlayerId=' + !!myPlayerId + ')');
   }
 }
 
