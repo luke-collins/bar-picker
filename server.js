@@ -35,6 +35,11 @@ app.get('/support', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'support.html'));
 });
 
+// ── PRIVACY POLICY (App Store Connect "Privacy Policy URL") ─────────────────
+app.get('/privacy', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'privacy.html'));
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── FIND BARS (Google Places API) ────────────────────────────────────────
